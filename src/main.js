@@ -24,9 +24,10 @@ const COLORS = [
   { hex: '#2d5ea8', name: 'Deep Blue' },
   { hex: '#d8d6cc', name: 'Silver' }
 ];
+const MODEL_IDS = ['rosso', 'civic'];
 const settings = {
   color: Math.min(store.get('color', 0), COLORS.length - 1), laps: store.get('laps', 3),
-  sound: store.get('sound', true), autoGas: store.get('autoGas', false)
+  car: MODEL_IDS.includes(store.get('car', 'rosso')) ? store.get('car', 'rosso') : 'rosso', sound: store.get('sound', true), autoGas: store.get('autoGas', false)
 };
 
 // ======================= renderer / scene =======================
@@ -58,7 +59,10 @@ const sun = new THREE.DirectionalLight('#fff3d9', 2.3); sun.position.set(-180, 2
 
 // ======================= car: built ONCE, cached, cloned =======================
 const CAR_SCALE = 0.82;
-const CAR = { template: null, mats: null, shadowGeo: null, shadowMat: null };
+const CAR = { shadowGeo: null, shadowMat: null };
+const MODELS = { rosso: null, civic: null };   // cached templates: {template, mats, paintKeys, wr (wheel radius, world m), name}
+const MODEL_LIST = [{ id: 'rosso', name: 'Rosso GT' }, { id: 'civic', name: 'Civic Sedan' }];
+/*CIVIC*/
 
 function bodyProfile() {
   const s = new THREE.Shape();
@@ -223,33 +227,103 @@ function buildCarTemplate() {
   for (const s of specs) {
     const pivot = new THREE.Group(); pivot.name = s[0]; pivot.position.set(s[1], .60, s[2]);
     const flip = new THREE.Group(); flip.rotation.y = s[3] ? Math.PI : 0;
-    const spin = new THREE.Group();
+    const spin = new THREE.Group(); spin.name = 'spin';
     for (const k in wheelGeos) spin.add(new THREE.Mesh(wheelGeos[k], mats[k]));
     flip.add(spin); pivot.add(flip); model.add(pivot);
   }
-  // cached blob shadow assets
+  MODELS.rosso = { template: model, mats, paintKeys: ['paint'], wr: .6 * CAR_SCALE, flipRight: true, tailBase: .35, tailBrake: 1.8, name: 'Rosso GT' };
+}
+
+function buildShadowAssets() {
   const sc = document.createElement('canvas'); sc.width = sc.height = 128;
   const g = sc.getContext('2d'), rg = g.createRadialGradient(64, 64, 6, 64, 64, 64);
   rg.addColorStop(0, 'rgba(20,32,20,.75)'); rg.addColorStop(.55, 'rgba(20,32,20,.4)'); rg.addColorStop(1, 'rgba(20,32,20,0)');
   g.fillStyle = rg; g.fillRect(0, 0, 128, 128);
   CAR.shadowGeo = new THREE.PlaneGeometry(3.3, 6.4); CAR.shadowGeo.rotateX(-Math.PI / 2);
   CAR.shadowMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc), transparent: true, depthWrite: false, toneMapped: false, fog: false });
-  CAR.mats = mats; CAR.template = model;
 }
 
-function spawnCar(colorHex) {
+function setCarColor(v, hex) {
+  for (const k in v.pm) { v.pm[k].color.set(hex); if (k === 'paintDeep') v.pm[k].color.multiplyScalar(.6); }
+}
+function spawnCar(id, colorHex) {
+  const M = MODELS[id];
   const root = new THREE.Group(), tilt = new THREE.Group(); root.add(tilt);
-  const model = CAR.template.clone(true); tilt.add(model);
-  const paint = CAR.mats.paint.clone(); paint.color.set(colorHex);
-  const tail = CAR.mats.tail.clone();
-  model.traverse(o => { if (o.isMesh) { if (o.userData.mk === 'paint') o.material = paint; else if (o.userData.mk === 'tail') o.material = tail; } });
+  const model = M.template.clone(true); tilt.add(model);       // geometry + shared materials are reused, nothing is rebuilt
+  const pm = {}; for (const k of M.paintKeys) pm[k] = M.mats[k].clone();
+  const tail = M.mats.tail.clone();
+  model.traverse(o => { if (o.isMesh) { const k = o.userData.mk; if (pm[k]) o.material = pm[k]; else if (k === 'tail') o.material = tail; } });
   const wheels = [];
-  for (const [n, front, flipped] of [['pivot_f0', true, false], ['pivot_f1', true, true], ['pivot_r0', false, false], ['pivot_r1', false, true]]) {
-    const pivot = model.getObjectByName(n); wheels.push({ pivot, spin: pivot.children[0].children[0], front, flipped });
+  for (const [n, front, flipped] of [['pivot_f0', true, false], ['pivot_f1', true, M.flipRight], ['pivot_r0', false, false], ['pivot_r1', false, M.flipRight]]) {
+    const pivot = model.getObjectByName(n); wheels.push({ pivot, spin: pivot.getObjectByName('spin'), front, flipped });
   }
   const shadow = new THREE.Mesh(CAR.shadowGeo, CAR.shadowMat); shadow.position.y = .1; shadow.renderOrder = 2; root.add(shadow);
   scene.add(root);
-  return { root, tilt, paint, tail, wheels, wheelAngle: 0, pitch: 0, roll: 0, prevVf: 0, accel: 0 };
+  const v = { id, root, tilt, pm, tail, tailBase: M.tailBase, tailBrake: M.tailBrake, wr: M.wr, wheels, wheelAngle: 0, pitch: 0, roll: 0, prevVf: 0, accel: 0 };
+  setCarColor(v, colorHex);
+  return v;
+}
+function disposeCar(v) {   // only per-car materials are disposed; geometry/templates stay cached
+  scene.remove(v.root);
+  for (const k in v.pm) v.pm[k].dispose(); v.tail.dispose();
+}
+
+// ---- Civic: build once with the original model code, then bake it into a few merged meshes ----
+const CIVIC_SCALE = 1.0;
+function buildCivicTemplate() {
+  const civic = createHondaCivic({ color: '#c91420' });
+  civic.setLights(true);
+  const root = civic.root; root.updateMatrixWorld(true);
+  const byMat = new Map(); for (const k in civic.materials) byMat.set(civic.materials[k], k);
+  const pivots = civic.allPivots, spinOf = p => p.children.find(c => c.isGroup);
+  const spins = new Set(pivots.map(spinOf)), pivSet = new Set(pivots);
+  const inside = (o, set) => { for (let p = o.parent; p; p = p.parent) if (set.has(p)) return p; return null; };
+  const bake = (mesh, refInv) => {
+    const mx = new THREE.Matrix4().multiplyMatrices(refInv, mesh.matrixWorld);
+    let g = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+    for (const n of Object.keys(g.attributes)) if (n !== 'position' && n !== 'normal') g.deleteAttribute(n);
+    if (!g.attributes.normal) g.computeVertexNormals();
+    g.clearGroups(); g.applyMatrix4(mx);
+    if (mx.determinant() < 0) { const p = g.attributes.position, nn = g.attributes.normal; for (let i = 0; i < p.count; i += 3) for (const a of [p, nn]) { const x = a.getX(i + 1), y = a.getY(i + 1), z = a.getZ(i + 1); a.setXYZ(i + 1, a.getX(i + 2), a.getY(i + 2), a.getZ(i + 2)); a.setXYZ(i + 2, x, y, z); } }
+    return g;
+  };
+  const collect = (filter, refInv) => {      // -> Map(material -> [geometry])
+    const out = new Map();
+    root.traverse(o => { if (!o.isMesh || !o.visible || !filter(o)) return; if (!out.has(o.material)) out.set(o.material, []); out.get(o.material).push(bake(o, refInv)); });
+    return out;
+  };
+  const meshesFrom = (groups, parent) => {
+    let i = 0;
+    groups.forEach((list, mat) => { const geo = mergeGeometries(list, false); list.forEach(g => g.dispose()); if (!geo) return;
+      const me = new THREE.Mesh(geo, mat); me.userData.mk = byMat.get(mat) || ('m' + (i++)); parent.add(me); });
+  };
+  const model = new THREE.Group(); model.name = 'model'; model.rotation.y = -Math.PI / 2; model.scale.setScalar(CIVIC_SCALE);
+  const shell = new THREE.Group(); model.add(shell);
+  const I = new THREE.Matrix4();
+  meshesFrom(collect(o => !inside(o, pivSet), I), shell);
+  // one wheel set per side (left z>0, right z<0), shared by the two wheels of that side
+  const byName = n => pivots.find(p => p.name === n);
+  const sets = {};
+  for (const [side, pv] of [['L', byName('Wheel_FL_Pivot')], ['R', byName('Wheel_FR_Pivot')]]) {
+    const sp = spinOf(pv), sInv = sp.matrixWorld.clone().invert(), pInv = pv.matrixWorld.clone().invert();
+    const spin = new THREE.Group(), stat = new THREE.Group();
+    meshesFrom(collect(o => inside(o, spins) === sp, sInv), spin);
+    meshesFrom(collect(o => inside(o, pivSet) === pv && !inside(o, spins), pInv), stat);
+    sets[side] = { spin, stat };
+  }
+  const specs = [['pivot_f0', 'Wheel_FL_Pivot', 'L'], ['pivot_f1', 'Wheel_FR_Pivot', 'R'], ['pivot_r0', 'Wheel_RL_Pivot', 'L'], ['pivot_r1', 'Wheel_RR_Pivot', 'R']];
+  for (const [n, src, side] of specs) {
+    const pivot = new THREE.Group(); pivot.name = n; pivot.position.copy(byName(src).position);
+    const spin = new THREE.Group(); spin.name = 'spin';
+    sets[side].spin.children.forEach(c => spin.add(new THREE.Mesh(c.geometry, c.material)));
+    sets[side].stat.children.forEach(c => pivot.add(new THREE.Mesh(c.geometry, c.material)));
+    pivot.add(spin); model.add(pivot);
+  }
+  // release everything the original model made except what the baked meshes use
+  root.traverse(o => { if (o.isSprite) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } else if (o.isMesh && o.geometry) o.geometry.dispose(); });
+  const cm = civic.materials; cm.tail.emissiveIntensity = 1.3;
+  MODELS.civic = { template: model, mats: { paint: cm.paint, paintCap: cm.paintCap, roof: cm.roof, paintDeep: cm.paintDeep, tail: cm.tail },
+    paintKeys: ['paint', 'paintCap', 'roof', 'paintDeep'], wr: .335 * CIVIC_SCALE, flipRight: false, tailBase: 1.3, tailBrake: 4.2, name: 'Civic Sedan' };
 }
 
 // ======================= track visuals =======================
@@ -295,8 +369,9 @@ function buildTrackVisuals(tr) {
   const bc = document.createElement('canvas'); bc.width = 512; bc.height = 96; const bx = bc.getContext('2d');
   bx.fillStyle = '#c91420'; bx.fillRect(0, 0, 512, 96); bx.fillStyle = '#fff'; bx.font = '800 52px Manrope, Arial, sans-serif'; bx.textAlign = 'center'; bx.textBaseline = 'middle'; bx.fillText('MINI CAR RACE', 256, 52);
   const bt = new THREE.CanvasTexture(bc); bt.colorSpace = THREE.SRGBColorSpace;
-  const banner = new THREE.Mesh(new THREE.PlaneGeometry(hw * 2 + 4.4, 3.2), new THREE.MeshBasicMaterial({ map: bt, side: THREE.DoubleSide, toneMapped: false }));
-  banner.position.set(0, 7.2, 0); gantry.add(banner);
+  // two single-sided planes (one per direction) so the text reads correctly from both sides, not mirrored on the back
+  const bannerGeo = new THREE.PlaneGeometry(hw * 2 + 4.4, 3.2), bannerMat = new THREE.MeshBasicMaterial({ map: bt, toneMapped: false });
+  for (const [ry, dz] of [[0, .02], [Math.PI, -.02]]) { const banner = new THREE.Mesh(bannerGeo, bannerMat); banner.position.set(0, 7.2, dz); banner.rotation.y = ry; gantry.add(banner); }
 
   // trees (one instanced mesh) and mountains (one instanced mesh)
   const trunk = new THREE.CylinderGeometry(.25, .38, 2.2, 5); trunk.translate(0, 1.1, 0);
@@ -412,9 +487,16 @@ const AI_OPTS = { lane: 3, latG: 24 };
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), tPos = new THREE.Vector3(), tLook = new THREE.Vector3();
 let camH = 0, camTransit = 0, fovNow = 60, shownPos = 0;
 
+function otherModel(id) { return id === 'rosso' ? 'civic' : 'rosso'; }
+function setCar(id) {            // swap cars from the cached templates: no geometry is rebuilt
+  settings.car = id; store.set('car', id);
+  disposeCar(pv); disposeCar(rv);
+  pv = spawnCar(id, colorFor(settings.color)); rv = spawnCar(otherModel(id), colorFor((settings.color + 2) % COLORS.length));
+  resetRace(); refreshMenu();
+}
 function colorFor(i) { return COLORS[i].hex; }
 function setPlayerColor(i) {
-  settings.color = i; store.set('color', i); pv.paint.color.set(colorFor(i)); rv.paint.color.set(colorFor((i + 2) % COLORS.length));
+  settings.color = i; store.set('color', i); setCarColor(pv, colorFor(i)); setCarColor(rv, colorFor((i + 2) % COLORS.length));
   document.querySelectorAll('.swatch').forEach((b, k) => { b.classList.toggle('sel', k === i); b.setAttribute('aria-pressed', String(k === i)); });
   setText($('colorName'), COLORS[i].name); $('menu').style.setProperty('--car', colorFor(i));
 }
@@ -431,14 +513,14 @@ function applyVisuals(c, v, dt) {
   v.pitch += (clamp(-v.accel * .0022, -.07, .06) - v.pitch) * k;
   v.roll += (clamp(-c.yaw * c.vf * .0022, -.08, .08) - v.roll) * k;
   v.tilt.rotation.x = v.pitch; v.tilt.rotation.z = v.roll;
-  v.wheelAngle += c.vf * dt / (.6 * CAR_SCALE);
+  v.wheelAngle += c.vf * dt / v.wr;
   const a = v.wheelAngle;
   for (const w of v.wheels) {
     w.spin.rotation.z = w.flipped ? a : -a;
     if (w.front) w.pivot.rotation.y = -c.steer * .45;
   }
   const brake = c.braking || (c.role === 'player' && state === 'finished');
-  v.tail.emissiveIntensity = brake ? 1.8 : .35;
+  v.tail.emissiveIntensity = brake ? v.tailBrake : v.tailBase;
 }
 
 // ======================= input =======================
@@ -593,6 +675,7 @@ function updateHud() {
 // ======================= menu =======================
 function refreshMenu() {
   setText($('menuBest'), bestLap ? 'Your best lap  ' + fmt(bestLap) : 'No lap record yet');
+  document.querySelectorAll('.caropt').forEach(b => { const on = b.dataset.car === settings.car; b.classList.toggle('sel', on); b.setAttribute('aria-pressed', String(on)); });
   document.querySelectorAll('.lapopt').forEach(b => { const on = Number(b.dataset.laps) === settings.laps; b.classList.toggle('sel', on); b.setAttribute('aria-pressed', String(on)); });
   const ag = $('autoGas'); if (ag) { ag.classList.toggle('sel', settings.autoGas); ag.setAttribute('aria-pressed', String(settings.autoGas)); }
 }
@@ -602,6 +685,7 @@ function initMenu() {
     const b = document.createElement('button'); b.className = 'swatch'; b.style.setProperty('--c', c.hex); b.setAttribute('aria-label', c.name); b.type = 'button';
     b.addEventListener('click', () => setPlayerColor(i)); wrap.appendChild(b);
   });
+  document.querySelectorAll('.caropt').forEach(b => b.addEventListener('click', () => { if (b.dataset.car !== settings.car) setCar(b.dataset.car); }));
   document.querySelectorAll('.lapopt').forEach(b => b.addEventListener('click', () => { settings.laps = Number(b.dataset.laps); store.set('laps', settings.laps); refreshMenu(); }));
   if (isTouch) { $('autoGasRow').hidden = false; $('autoGas').addEventListener('click', () => { settings.autoGas = !settings.autoGas; store.set('autoGas', settings.autoGas); refreshMenu(); }); }
   $('btnStart').addEventListener('click', startCountdown);
@@ -669,11 +753,13 @@ function bootStep(p, msg) {
 }
 async function boot() {
   await bootStep(42, 'Building the car…');
-  buildCarTemplate();            // heavy part: runs once, then the car is cached and cloned
+  buildShadowAssets(); buildCarTemplate();   // heavy part: runs once, then the car is cached and cloned
+  await bootStep(54, 'Building the sedan…');
+  buildCivicTemplate();          // baked into a few merged meshes, also cached
   await bootStep(64, 'Laying the track…');
   buildTrackVisuals(track); initSmoke();
   await bootStep(82, 'Painting and fuelling up…');
-  pv = spawnCar(colorFor(settings.color)); rv = spawnCar(colorFor((settings.color + 2) % COLORS.length));
+  pv = spawnCar(settings.car, colorFor(settings.color)); rv = spawnCar(otherModel(settings.car), colorFor((settings.color + 2) % COLORS.length));
   initMenu(); initHud(); resize();
   resetRace(); camPos.set(player.x + 8, 3, player.z - 8); camLook.set(player.x, .9, player.z);
   setPlayerColor(settings.color); setSound(settings.sound); refreshMenu();
@@ -681,6 +767,7 @@ async function boot() {
   renderer.compile(scene, camera);
   await bootStep(100, 'Ready to race');
   window.__tdBooted = true;
+  if (location.hash === '#debug') window.__td = { scene, camera, renderer, get pv() { return pv; }, get rv() { return rv; }, setCar };
   showSheet('menu');
   bootUi.root.classList.add('done');
   setTimeout(() => { bootUi.root.hidden = true; }, 500);
