@@ -75,9 +75,9 @@ export function buildHazards(tr) {
   // oil slicks: the car slides with almost no grip
   [[0.07, -6, 5], [0.115, 4, 5], [0.19, -3, 4.5], [0.33, 2, 5], [0.465, -5, 4.5], [0.525, 3, 5], [0.685, -2, 4.5], [0.76, 5, 5], [0.945, -4, 5]].forEach(a => oil(a[0], a[1], a[2]));
   // rocks: a slalom, plus single blockers
-  [[0.30, 7], [0.41, -3], [0.56, -5], [0.572, 5], [0.584, -5], [0.62, 1], [0.665, 4], [0.715, -6], [0.80, 0], [0.872, 6], [0.878, -6], [0.975, 2]].forEach(a => rock(a[0], a[1]));
+  // (rocks removed)
   // boulders that swing across the track
-  [[0.48, 0, 6.5], [0.64, 2.1, 8], [0.71, 4, 7.2], [0.925, 1, 6.8], [0.385, 3, 7]].forEach(a => boulder(a[0], a[1], a[2]));
+  // (swinging boulders removed)
   // lava beside the road
   lava(0.21, 0.29); lava(0.355, 0.425); lava(0.83, 0.90);
   return H;
@@ -106,7 +106,7 @@ export function placeOnTrack(c, tr, idx, lat) {
   c.x = tr.x[idx] + tr.nx[idx] * lat; c.z = tr.z[idx] + tr.nz[idx] * lat; c.h = tr.heading[idx];
   c.vx = c.vz = c.vf = c.vl = c.speed = c.steer = c.yaw = 0; c.idx = idx; c.total = idx > tr.N / 2 ? idx - tr.N : idx;
   c.lat = lat; c.prog = c.total; c.stuck = 0; c.onRoad = true; c.drifting = false;
-  c.nitroOn = c.boosting = false; c.boostT = c.oilT = c.fallT = c.ghostT = 0; c.padK = -1; c.laneNow = lat;
+  c.nitroOn = c.boosting = false; c.boostT = c.oilT = c.fallT = c.ghostT = 0; c.padK = -1; c.laneNow = lat; c.yawS = 0;
 }
 // put a car back on the road at the same spot along the lap (keeps its lap count)
 export function respawn(c, tr, lat) {
@@ -157,7 +157,7 @@ export function stepCar(c, inp, dt, tr, env) {
   c.boosting = bf > 0;
   const boost = bf > 1 ? 1.25 : bf;
   const vmax = P.vmax * c.vmaxScale * (c.onRoad ? 1 : 0.5) * (1 + 0.2 * boost);
-  const target = inp.steer, rate = target === 0 ? 10 : 6;
+  const target = inp.steer, rate = target === 0 ? 5 : 3.4;
   c.steer += clamp(target - c.steer, -rate * dt, rate * dt);
 
   // heading from steering
@@ -167,7 +167,8 @@ export function stepCar(c, inp, dt, tr, env) {
   let yaw = c.steer * maxYaw * lowSpeed * (c.vf < -0.5 ? -1 : 1);
   if (inp.hand) yaw *= 1.35;
   if (c.oilT > 0) { c.oilT -= dt; yaw *= 0.75; }
-  c.yaw = yaw; c.h -= yaw * dt;
+  c.yawS = (c.yawS || 0) + (yaw - (c.yawS || 0)) * Math.min(1, dt * 9);   // yaw inertia: no sudden snap when turning in/out
+  yaw = c.yawS; c.yaw = yaw; c.h -= yaw * dt;
   const fx = Math.sin(c.h), fz = Math.cos(c.h), rx = -fz, rz = fx;
 
   // re-decompose world velocity in the new heading frame

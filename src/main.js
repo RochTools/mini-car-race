@@ -623,7 +623,7 @@ function buildTrackVisuals(tr) {
     const geo = new THREE.PlaneGeometry(2, 2); geo.rotateX(-Math.PI / 2);
     for (const o of HZ.oil) { const m = new THREE.Mesh(geo, mat); m.scale.set(o.r * 1.08, 1, o.r * .95); m.rotation.y = rnd() * 6; m.position.set(o.x, .12, o.z); m.renderOrder = 1; scene.add(m); freeze(m); } }
   // rocks
-  { const im = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: '#9a8c80', flatShading: true }), HZ.rocks.length), d = new THREE.Object3D();
+  if (HZ.rocks.length) { const im = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: '#9a8c80', flatShading: true }), HZ.rocks.length), d = new THREE.Object3D();
     HZ.rocks.forEach((r, i) => { d.position.set(r.x, r.r * .45, r.z); d.scale.set(r.r * 1.15, r.r * .95, r.r * 1.05); d.rotation.set(rnd(), rnd() * 6, rnd()); d.updateMatrix(); im.setMatrixAt(i, d.matrix); });
     im.instanceMatrix.needsUpdate = true; im.frustumCulled = false; scene.add(im); freeze(im);
     // warning cones next to every rock
