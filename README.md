@@ -1,6 +1,6 @@
 # Mini Car Race (PWA)
 
-A 3D car race against an AI rival, packaged as an installable, offline-capable Progressive Web App.
+A 3D five-car race (you + 4 rivals, one 5.6 km lap, hazards, nitro, 6 cameras), packaged as an installable, offline-capable Progressive Web App.
 
 ## Put it online (needed to install it)
 Browsers only allow installing and offline mode on **HTTPS** (or localhost). Upload this whole folder to any static host:
@@ -19,7 +19,7 @@ Installed, it opens full screen in landscape with its own icon.
 Open the game once while online. The app shell, Three.js and the fonts are then cached by `sw.js`, and the game starts with no internet.
 
 ## Updating
-Edit `index.html`, then change `VERSION` at the top of `sw.js` (for example `mini-car-race-v2`) so every player gets the new files.
+If you edit `src/*.js`, rebuild `index.html` first (run `python3 build.py .`; it inlines `src/` into the `<script type="module">` block: `/*SIM*/ /*GLYPHS*/ /*CIVIC*/ /*REVUELTO*/ /*SPORT*/` in `main.js` mark where `sim.js`, `glyphs.js`, `civic.js`, `revuelto.js`, `sportscar.js` go). Then change `VERSION` at the top of `sw.js` (for example `mini-car-race-v2`) so every player gets the new files.
 
 ## Files
 - `index.html`  the whole game in one file
