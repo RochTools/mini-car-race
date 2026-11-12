@@ -119,20 +119,50 @@ button:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
   .card { width: min(520px, 64vw); padding: 12px 16px; } .eyebrow { display: none; } .two { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 12px; } .swatch { width: 34px; height: 34px; } .seg button, .opt { min-height: 40px; } .field > span { font-size: 12px; } .btn.primary { min-height: 44px; } .card h1, .card h2 { font-size: 20px; margin-bottom: 8px; } .field { margin-bottom: 8px; } .hint { display: none; } .btn { min-height: 46px; }
 }
 
-/* full-screen start menu */
-#menu.sheet { z-index: 40; pointer-events: auto; overflow: auto; align-items: center; justify-content: center; background: #0d0e11; }
-.menu-wrap { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 28px; align-items: center; width: min(1120px, 100%); margin: auto; }
-.menu-logo { width: 100%; aspect-ratio: 1100 / 775; max-height: 80vh; background: var(--logo) center / contain no-repeat; }
-#menu .card { width: 100%; max-width: 520px; justify-self: center; }
-.cname { display: flex; align-items: center; gap: 10px; }
-.carprev { width: 56px; height: 24px; flex: none; } .carprev .body { fill: var(--car, #c91420); transition: fill .2s; }
-@media (max-width: 760px), (orientation: portrait) {
-  .menu-wrap { grid-template-columns: 1fr; gap: 10px; }
-  .menu-logo { width: min(100%, 440px); justify-self: center; max-height: 30vh; }
-  #menu .card { max-width: 560px; }
-}
+/* start menu = live car showcase (the 3D scene shows through; the car turns on a platform) */
+#menu.sheet { z-index: 40; pointer-events: none; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; align-items: stretch; justify-content: stretch; gap: 8px; overflow: hidden;
+  background: linear-gradient(180deg, rgba(8, 10, 14, .62) 0, rgba(8, 10, 14, 0) 20%, rgba(8, 10, 14, 0) 50%, rgba(8, 10, 14, .82) 100%); color: #f2f4f7; }
+.mn-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; pointer-events: none; }
+.mn-brand { display: grid; gap: 2px; text-shadow: 0 1px 8px rgba(0, 0, 0, .5); }
+.mn-brand b { font: 800 15px var(--f-num); letter-spacing: .3em; text-transform: uppercase; }
+.mn-brand span { font: 600 12px var(--f-num); color: rgba(242, 244, 247, .75); }
+.mn-wx { flex: none; width: auto; pointer-events: auto; padding: 3px; border-radius: 999px; background: rgba(13, 14, 17, .55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.mn-wx button { flex: none; min-height: 34px; padding: 0 14px; border-radius: 999px; border: 0; color: #f2f4f7; font: 700 13px var(--f-num); }
+.mn-wx button.sel { background: #f2f4f7; color: #12151a; }
+.mn-stage { position: relative; pointer-events: auto; touch-action: none; cursor: grab; min-height: 0; }
+.mn-stage:active { cursor: grabbing; }
+.mn-arrow { position: absolute; top: 50%; left: 0; transform: translateY(-50%); width: 56px; height: 56px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .35); background: rgba(13, 14, 17, .55); color: #fff; display: grid; place-items: center; padding: 0; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); transition: background .15s, transform .15s; }
+.mn-arrow.right { left: auto; right: 0; }
+.mn-arrow svg { width: 26px; height: 26px; }
+.mn-arrow:hover { background: var(--car, #c91420); border-color: var(--car, #c91420); }
+.mn-arrow:active { transform: translateY(-50%) scale(.92); }
+.mn-panel { pointer-events: auto; display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: center; justify-content: space-between; padding: 14px 18px; border-radius: 22px; box-sizing: border-box; width: min(980px, 100%); margin: 0 auto;
+  background: rgba(13, 14, 17, .72); border: 1px solid rgba(255, 255, 255, .12); border-top: 3px solid var(--car, #c91420); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 12px 40px rgba(0, 0, 0, .4); }
+.mn-info { flex: 1 1 230px; min-width: 0; }
+.mn-count { margin: 0; font: 800 11px var(--f-num); letter-spacing: .16em; color: rgba(242, 244, 247, .6); }
+#carName { margin: 2px 0 0; font: 800 28px/1.2 var(--f-num); }
+.mn-tag { margin: 2px 0 8px; font: 600 13px var(--f-num); color: rgba(242, 244, 247, .72); }
+.mn-bars { display: grid; grid-template-columns: auto 1fr; gap: 5px 10px; align-items: center; font: 700 11px var(--f-num); letter-spacing: .08em; text-transform: uppercase; color: rgba(242, 244, 247, .7); max-width: 280px; }
+.mn-bars i { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .16); overflow: hidden; }
+.mn-bars b { display: block; height: 100%; width: 50%; border-radius: 3px; background: var(--car, #c91420); transition: width .35s cubic-bezier(.3, .8, .3, 1), background .2s; }
+.mn-colors { flex: 1 1 250px; display: grid; gap: 8px; justify-items: start; }
+.mn-lbl { font: 700 12px var(--f-num); color: rgba(242, 244, 247, .7); } .mn-lbl #colorName { font: 700 12px var(--f-num); font-style: normal; color: #fff; }
+.mn-panel .swatch { width: 34px; height: 34px; border-color: #14171c; box-shadow: 0 0 0 2px rgba(255, 255, 255, .3); }
+.mn-panel .swatch.sel { box-shadow: 0 0 0 3px #fff; }
+.mn-dots { display: flex; gap: 8px; }
+.cardot { width: 10px; height: 10px; padding: 0; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .3); transition: width .2s, background .2s; }
+.cardot.sel { width: 26px; border-radius: 5px; background: #fff; }
+.mn-actions { flex: 0 1 260px; display: grid; gap: 8px; min-width: 200px; }
+.mn-actions .btn.primary { min-height: 56px; font-size: 19px; }
+.mn-small { min-height: 40px; font-size: 14px; color: #f2f4f7; border-color: rgba(255, 255, 255, .35); }
+.mn-small.sel { background: #f2f4f7; color: #12151a; }
+.mn-hint { margin: 0; text-align: center; font: 600 12px var(--f-num); color: rgba(242, 244, 247, .6); }
+@media (hover: none) { .mn-keys { display: none; } }
+@media (max-width: 720px) { .mn-panel { padding: 12px 14px; gap: 12px; } .mn-info, .mn-colors, .mn-actions { flex-basis: 100%; } #carName { font-size: 24px; } .mn-arrow { width: 48px; height: 48px; } .mn-bars { max-width: none; } }
 @media (max-height: 520px) and (orientation: landscape) {
-  #menu.sheet { justify-content: center; } .menu-wrap { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; } .menu-logo { max-height: 88vh; width: 100%; justify-self: stretch; }
+  #menu.sheet { gap: 4px; } .mn-panel { padding: 8px 14px; gap: 8px 18px; flex-wrap: nowrap; border-radius: 18px; }
+  .mn-info, .mn-colors, .mn-actions { flex-basis: auto; } .mn-info { flex: 1 1 0; } .mn-colors { flex: 1 1 0; } .mn-actions { flex: 0 0 210px; min-width: 0; }
+  #carName { font-size: 21px; } .mn-tag { margin-bottom: 4px; } .mn-panel .swatch { width: 26px; height: 26px; } .mn-panel .swatches { gap: 7px; flex-wrap: nowrap; } .mn-actions .btn.primary { min-height: 46px; font-size: 17px; } .mn-keys { display: none; } .mn-brand b { font-size: 13px; }
 }
 @media (prefers-reduced-motion: reduce) { .banner.pop { animation: none; } }
 
@@ -214,24 +244,34 @@ button:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
   </div>
 
   <div class="sheet" id="menu" hidden>
-    <div class="menu-wrap">
-      <div class="menu-logo" role="img" aria-label="Mini Car Race"></div>
-      <div class="card">
-      <p class="eyebrow">Mini Car Race</p>
-      <h1>Ready to race?</h1>
-      <div class="field"><span>Your car — the other four are your rivals</span><div class="seg wrap" id="carSeg"></div><span class="blurb" id="carBlurb"></span></div>
-      <div class="field"><span>Car colour</span><div class="swatches" id="swatches"></div><div class="cname"><svg class="carprev" viewBox="0 0 92 40" aria-hidden="true"><path class="body" d="M3 28v-6c0-3 2-5 6-5l16-3 12-9c1.500-1.200 3-1.500 5-1.500h22c3 0 5 1 7 3.500l7 8 10 2c3 .8 4 2.500 4 5.500v5z"/><path d="M40 8.500h19c2 0 3 .8 4 2l5 6H34z" fill="#f7faf4" opacity=".85"/><circle cx="24" cy="29" r="8" fill="#1d3524"/><circle cx="24" cy="29" r="3.200" fill="#d2dfcd"/><circle cx="69" cy="29" r="8" fill="#1d3524"/><circle cx="69" cy="29" r="3.200" fill="#d2dfcd"/></svg><span id="colorName"></span></div></div>
-      <div class="two">
-      <div class="field"><span>Weather (one lap · 5.6 km · 5 cars)</span><div class="seg"><button class="wxopt" data-wx="clear" type="button">Clear</button><button class="wxopt" data-wx="storm" type="button">Storm</button></div></div>
-      <div class="field" id="autoGasRow" hidden><span>Mobile controls</span><button class="opt" id="autoGas" type="button">Auto gas (you only steer and brake)</button></div>
+    <header class="mn-top">
+      <div class="mn-brand"><b>Mini Car Race</b><span id="menuBest"></span></div>
+      <div class="seg mn-wx" role="group" aria-label="Weather"><button class="wxopt" data-wx="clear" type="button">Clear</button><button class="wxopt" data-wx="storm" type="button">Storm</button></div>
+    </header>
+    <div class="mn-stage" id="menuStage">
+      <button class="mn-arrow" id="carPrev" type="button" aria-label="Previous car"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l-8 8 8 8"/></svg></button>
+      <button class="mn-arrow right" id="carNext" type="button" aria-label="Next car"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4l8 8-8 8"/></svg></button>
+    </div>
+    <section class="mn-panel" aria-label="Choose your car">
+      <div class="mn-info">
+        <p class="mn-count" id="carCount"></p>
+        <h1 id="carName"></h1>
+        <p class="mn-tag" id="carTag"></p>
+        <div class="mn-bars"><span>Speed</span><i><b id="barTop"></b></i><span>Accel</span><i><b id="barAcc"></b></i></div>
       </div>
-      <p class="best" id="menuBest"></p>
-      <p class="hint">Keyboard: ↑ / W gas · ↓ / S brake · ← → / A D steer · Shift / N nitro · Space handbrake · C camera · R reset car · Esc pause. Watch out for oil, rocks, boulders and lava! On a phone, hold it sideways (landscape).</p>
-      <button class="btn primary" id="btnStart" type="button">Start race</button>
-      <button class="btn" id="btnInstall" type="button" hidden style="width:100%;margin-top:10px">Install app</button>
-      <p class="hint" id="iosHint" hidden style="margin:10px 0 0">To install on iPhone: tap Share, then Add to Home Screen.</p>
-    </div>
-    </div>
+      <div class="mn-colors">
+        <span class="mn-lbl">Colour · <em id="colorName"></em></span>
+        <div class="swatches" id="swatches"></div>
+        <div class="mn-dots" id="carDots"></div>
+      </div>
+      <div class="mn-actions">
+        <button class="btn primary" id="btnStart" type="button">Start race</button>
+        <button class="opt mn-small" id="autoGas" type="button" hidden>Auto gas</button>
+        <button class="btn mn-small" id="btnInstall" type="button" hidden>Install app</button>
+        <p class="mn-hint" id="iosHint" hidden>iPhone: tap Share, then Add to Home Screen.</p>
+        <p class="mn-hint mn-keys">← → change car · Enter start</p>
+      </div>
+    </section>
   </div>
 
   <div class="sheet center" id="pause" hidden>
@@ -4156,6 +4196,9 @@ const player = racers[0];
 let vis = [];                    // visuals, same order as racers
 let state = 'menu', paused = false, raceT = 0, simT = 0, countT = 0, lastCount = 4, bestTime = store.get('best2', 0), topSpeed = 0;
 const finishList = [];
+// showcase (start menu): turntable spin, slide-in when the car changes, and the camera's right vector
+const show = { spin: 0, slide: 0, y: .08, rx: 1, rz: 0, drag: false, idle: 0 };
+let stage = null;
 const input = { throttle: 0, brake: 0, steer: 0, hand: false, nitro: false };
 const keys = Object.create(null), touchState = { left: false, right: false, gas: false, brake: false, hand: false, nitro: false };
 const COAST = { throttle: 0, brake: .35, steer: 0, hand: false, nitro: false };
@@ -4196,11 +4239,16 @@ function setCar(id) {
   buildGrid(); refreshMenu();
   renderer.compile(scene, camera);   // compile any new shaders now, behind the menu, instead of stuttering at the race start
 }
+function cycleCar(d) {
+  const n = MODEL_IDS.length, i = (MODEL_IDS.indexOf(settings.car) + d + n) % n;
+  setCar(MODEL_IDS[i]); show.slide = d * 9;
+}
 function setPlayerColor(i) {
   settings.color = i; store.set('color2', i);
   if (vis.length) buildGrid();
   document.querySelectorAll('.swatch').forEach((b, k) => { b.classList.toggle('sel', k === i); b.setAttribute('aria-pressed', String(k === i)); });
   setText($('colorName'), COLORS[i].name); $('menu').style.setProperty('--car', colorFor(i));
+  if (stage) stage.userData.ring.color.set(colorFor(i));
 }
 function setWeather(storm2) {
   settings.storm = storm2; store.set('storm', storm2); applyWeather(); refreshMenu();
@@ -4220,7 +4268,9 @@ function resetRace() {
 }
 function applyVisuals(c, v, dt) {
   const sink = c.fallT > 0 ? Math.min(2.6, (1.5 - c.fallT) * 2.2) : 0;
-  v.root.position.set(c.x, -sink, c.z); v.root.rotation.y = c.h;
+  const showing = state === 'menu' && c.role === 'player';
+  if (showing) { v.root.position.set(c.x + show.rx * show.slide, -sink + show.y, c.z + show.rz * show.slide); v.root.rotation.y = c.h + show.spin; }
+  else { v.root.position.set(c.x, -sink, c.z); v.root.rotation.y = c.h; }
   v.shadow.visible = sink === 0;
   v.tilt.visible = !(c.ghostT > 0) || (((performance.now() / 90) | 0) & 1) === 0;
   const acc = dt > 0 ? (c.vf - v.prevVf) / dt : 0; v.prevVf = c.vf; v.accel += (clamp(acc, -40, 25) - v.accel) * Math.min(1, dt * 6);
@@ -4241,6 +4291,11 @@ function applyVisuals(c, v, dt) {
 // ======================= input =======================
 const KEYMAP = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'hand', ShiftLeft: 'nitro', ShiftRight: 'nitro', KeyN: 'nitro' };
 addEventListener('keydown', e => {
+  if (state === 'menu' && !$('menu').hidden) {
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') { if (!e.repeat) cycleCar(-1); e.preventDefault(); return; }
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') { if (!e.repeat) cycleCar(1); e.preventDefault(); return; }
+    if (e.code === 'Enter' && !(document.activeElement && document.activeElement.tagName === 'BUTTON')) { startCountdown(); return; }
+  }
   if (e.code === 'Escape' || e.code === 'KeyP') { if (state === 'racing' || state === 'countdown') setPaused(!paused); return; }
   if (e.code === 'KeyR' && (state === 'racing')) { respawnPlayer(); return; }
   if (e.code === 'KeyC' && !e.repeat && (state === 'racing' || state === 'countdown' || state === 'finished')) { cycleCamera(1); return; }
@@ -4361,7 +4416,11 @@ function updateCamera(dt, t) {
   const c = player, orbit = state === 'menu' || state === 'result', mode = CAMS[settings.cam].id;
   const sf = clamp(c.speed / PARAMS.vmax, 0, 1);
   let tf = 60, hard = false;
-  if (orbit) {
+  if (state === 'menu') {      // showcase: fixed 3/4 view, the car turns on its platform
+    const R = clamp(8.6 / Math.max(camera.aspect, .01), 9, 20), a = .62;
+    tPos.set(c.x + Math.sin(c.h + a) * R, 1.6 + R * .13, c.z + Math.cos(c.h + a) * R); tLook.set(c.x, .75 - R * .09, c.z);
+    const fx = tLook.x - tPos.x, fz = tLook.z - tPos.z, fl = Math.hypot(fx, fz) || 1; show.rx = -fz / fl; show.rz = fx / fl;
+  } else if (orbit) {
     const a = t * .22 + .9; tPos.set(c.x + Math.sin(c.h + a) * 9.5, 2.5 + Math.sin(t * .3) * .3, c.z + Math.cos(c.h + a) * 9.5); tLook.set(c.x, .9, c.z);
   } else {
     const fast = mode === 'hood' || mode === 'bumper';
@@ -4398,7 +4457,7 @@ function updateCamera(dt, t) {
   camera.position.copy(camPos); camera.lookAt(camLook);
   if (sh > .002 && !orbit) camera.position.set(camPos.x + (Math.random() - .5) * sh, camPos.y + (Math.random() - .5) * sh, camPos.z + (Math.random() - .5) * sh);
   fovBoost += ((c.boosting && !orbit ? 1 : 0) - fovBoost) * Math.min(1, dt * 3);
-  const target = (orbit ? 60 : tf) + fovBoost * 12;
+  const target = (state === 'menu' ? 40 : orbit ? 60 : tf) + fovBoost * 12;
   fovNow += (target - fovNow) * Math.min(1, dt * 4);
   if (Math.abs(camera.fov - fovNow) > .05) { camera.fov = fovNow; camera.updateProjectionMatrix(); }
 }
@@ -4477,12 +4536,28 @@ function updateHud() {
   }
 }
 
+// ======================= showcase platform (start menu) =======================
+function buildStage() {
+  stage = new THREE.Group(); stage.visible = false;
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(3.7, 3.85, .16, 72), new THREE.MeshBasicMaterial({ color: '#171a20' }));
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(3.72, .05, 8, 96), new THREE.MeshBasicMaterial({ color: '#c91420' })); rim.rotation.x = Math.PI / 2; rim.position.y = .08;
+  const tickMat = new THREE.MeshBasicMaterial({ color: '#4a5260' });
+  for (let i = 0; i < 48; i++) {   // marks around the edge so the turning platform is visible
+    const t = new THREE.Mesh(new THREE.BoxGeometry(.09, .01, i % 4 ? .32 : .6), tickMat), a = i / 48 * Math.PI * 2;
+    t.position.set(Math.sin(a) * 3.3, .085, Math.cos(a) * 3.3); t.rotation.y = a; stage.add(t);
+  }
+  stage.add(disc, rim); stage.userData.ring = rim.material; scene.add(stage);
+}
+
 // ======================= menu =======================
 function refreshMenu() {
-  setText($('menuBest'), bestTime ? 'Your best time  ' + fmt(bestTime) : 'No race record yet');
-  document.querySelectorAll('.caropt').forEach(b => { const on = b.dataset.car === settings.car; b.classList.toggle('sel', on); b.setAttribute('aria-pressed', String(on)); });
+  setText($('menuBest'), bestTime ? 'Best time  ' + fmt(bestTime) : 'No race record yet');
+  const m = MODEL_BY[settings.car], idx = MODEL_IDS.indexOf(settings.car);
+  setText($('carName'), m.name); setText($('carTag'), m.tag); setText($('carCount'), (idx + 1) + ' / ' + MODEL_LIST.length);
+  const rel = k => { const vs = MODEL_LIST.map(x => x[k]), lo = Math.min(...vs), hi = Math.max(...vs); return Math.round(28 + (m[k] - lo) / ((hi - lo) || 1) * 72); };
+  $('barTop').style.width = rel('top') + '%'; $('barAcc').style.width = rel('acc') + '%';
+  document.querySelectorAll('.cardot').forEach((b, k) => { b.classList.toggle('sel', k === idx); b.setAttribute('aria-current', String(k === idx)); });
   document.querySelectorAll('.wxopt').forEach(b => { const on = (b.dataset.wx === 'storm') === settings.storm; b.classList.toggle('sel', on); b.setAttribute('aria-pressed', String(on)); });
-  const m = MODEL_BY[settings.car]; setText($('carBlurb'), m.name + ' — ' + m.tag + ' · rivals: ' + MODEL_LIST.filter(x => x.id !== settings.car).map(x => x.rival).join(', '));
   const ag = $('autoGas'); if (ag) { ag.classList.toggle('sel', settings.autoGas); ag.setAttribute('aria-pressed', String(settings.autoGas)); }
 }
 function initMenu() {
@@ -4491,13 +4566,19 @@ function initMenu() {
     const b = document.createElement('button'); b.className = 'swatch'; b.style.setProperty('--c', c.hex); b.setAttribute('aria-label', c.name); b.type = 'button';
     b.addEventListener('click', () => setPlayerColor(i)); wrap.appendChild(b);
   });
-  const seg = $('carSeg');
-  MODEL_LIST.forEach(m => {
-    const b = document.createElement('button'); b.className = 'caropt'; b.dataset.car = m.id; b.type = 'button'; b.textContent = m.name;
-    b.addEventListener('click', () => { if (m.id !== settings.car) setCar(m.id); }); seg.appendChild(b);
+  const dots = $('carDots');
+  MODEL_LIST.forEach((m, k) => {
+    const b = document.createElement('button'); b.className = 'cardot'; b.type = 'button'; b.setAttribute('aria-label', m.name);
+    b.addEventListener('click', () => { const cur = MODEL_IDS.indexOf(settings.car); if (k !== cur) { setCar(m.id); show.slide = k > cur ? 9 : -9; } }); dots.appendChild(b);
   });
+  $('carPrev').addEventListener('click', () => cycleCar(-1));
+  $('carNext').addEventListener('click', () => cycleCar(1));
+  const stg = $('menuStage'); let dragX = 0, dragId = null;      // drag the showcase to turn the car by hand
+  stg.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; dragId = e.pointerId; dragX = e.clientX; show.drag = true; try { stg.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ } });
+  stg.addEventListener('pointermove', e => { if (e.pointerId !== dragId) return; show.spin += (e.clientX - dragX) * .012; dragX = e.clientX; });
+  for (const t of ['pointerup', 'pointercancel']) stg.addEventListener(t, e => { if (e.pointerId === dragId) { dragId = null; show.drag = false; } });
   document.querySelectorAll('.wxopt').forEach(b => b.addEventListener('click', () => setWeather(b.dataset.wx === 'storm')));
-  if (isTouch) { $('autoGasRow').hidden = false; $('autoGas').addEventListener('click', () => { settings.autoGas = !settings.autoGas; store.set('autoGas', settings.autoGas); refreshMenu(); }); }
+  if (isTouch) { $('autoGas').hidden = false; $('autoGas').addEventListener('click', () => { settings.autoGas = !settings.autoGas; store.set('autoGas', settings.autoGas); refreshMenu(); }); }
   $('btnStart').addEventListener('click', startCountdown);
   $('btnAgain').addEventListener('click', startCountdown);
   $('btnMenu').addEventListener('click', goMenu);
@@ -4525,7 +4606,7 @@ function frame(now) {
   let raw = (now - last) / 1000; last = now; if (raw > .25) raw = .25; if (raw <= 0) return;
   // adaptive resolution: drop pixel ratio as soon as the game falls under ~50 fps, never raise past the level that failed.
   // Only frames that actually render count (the menu skips rendering, so its fast frames would hide a slow race).
-  if (state !== 'menu' && raw < .1) { ftAcc += raw * 1000; ftN++; }
+  if (raw < .1) { ftAcc += raw * 1000; ftN++; }
   if (now - lastAdapt > 1000) {
     lastAdapt = now;
     if (ftN >= 20 && ++warm > 1) {   // the first window after a (re)start holds shader-compile hitches, so it is ignored
@@ -4542,6 +4623,7 @@ function frame(now) {
     if (n === 5) acc = 0;
   }
   const dtv = paused ? 0 : raw;
+  if (state === 'menu') { if (!show.drag) show.spin += raw * .5; show.slide *= Math.exp(-raw * 6.5); }
   for (let k = 0; k < 5; k++) applyVisuals(racers[k], vis[k], dtv || .0001);
   if (running) {
     for (let k = 0; k < 5; k++) {
@@ -4560,8 +4642,10 @@ function frame(now) {
   }
   if (audio.ctx && (now | 0) % 4 === 0) audioKeepAlive();
   updateCamera(raw, now / 1000);
-  if (state === 'menu') return;   // the full-screen menu covers the scene: don't spend battery rendering it
-  const tags = !(state !== 'result' && (CAMS[settings.cam].id === 'hood' || CAMS[settings.cam].id === 'bumper'));
+  const inMenu = state === 'menu';   // the menu is a live showcase: the rivals step out of the picture and the platform appears
+  if (stage) { stage.visible = inMenu; if (inMenu) { stage.position.set(player.x, 0, player.z); stage.rotation.y = show.spin; } }
+  for (let k = 1; k < 5; k++) vis[k].root.visible = !inMenu;
+  const tags = !inMenu && !(state !== 'result' && (CAMS[settings.cam].id === 'hood' || CAMS[settings.cam].id === 'bumper'));
   for (let k = 0; k < 5; k++) { const v = vis[k], c = racers[k]; v.tag.visible = k === 0 ? tags : (Math.abs(c.x - camPos.x) + Math.abs(c.z - camPos.z) < 260); }
   updateSmoke(dtv); updateScenery(dtv, simT); updateStorm(dtv); updateRain(dtv); drawFx(now / 1000, running);
   renderer.render(scene, camera);
@@ -4580,7 +4664,7 @@ async function boot() {
   const rest = MODEL_IDS.filter(id => id !== settings.car);
   for (let i = 0; i < rest.length; i++) { await bootStep(18 + i * 13, 'Building rival ' + (i + 1) + ' of 4…'); ensureModel(rest[i]); }
   await bootStep(74, 'Laying the track and hazards…');
-  buildTrackVisuals(track); initSmoke(); initRain(); initFx();
+  buildTrackVisuals(track); buildStage(); initSmoke(); initRain(); initFx();
   await bootStep(86, 'Painting and fuelling up…');
   initMenu(); initHud(); resize(); applyWeather();
   buildGrid(); camPos.set(player.x + 8, 3, player.z - 8); camLook.set(player.x, .9, player.z);
