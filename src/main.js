@@ -745,7 +745,41 @@ function updateStorm(dt) {
 }
 
 // ======================= audio =======================
-const audio = { ctx: null, on: settings.sound, o1: null, o2: null, lp: null, eg: null, sq: null, gr: null, wd: null, master: null, tick: 0, noise: null };
+const audio = { buf: {}, loops: {}, ctx: null, on: settings.sound, o1: null, o2: null, lp: null, eg: null, sq: null, gr: null, wd: null, master: null, tick: 0, noise: null };
+// ---- optional mp3 files in the sounds/ folder. Any file that is missing simply keeps the built-in beep/synth sound. ----
+// (race1.mp3 and huarn.mp3 are intentionally NOT used.)
+const SOUND_FILES = {
+  engine: ['engine', 'engine_loop', 'engine1'], skid: ['skid', 'drift', 'tire', 'screech'], crash: ['crash', 'hit', 'bump'],
+  nitro: ['nitro', 'boost', 'whoosh'], count: ['count', 'countdown', 'beep'], go: ['go', 'start'], music: ['music', 'bgm', 'theme'],
+  rain: ['rain', 'storm'], thunder: ['thunder'], lava: ['lava', 'burn'], win: ['win', 'finish', 'victory']
+};
+const SOUND_VOL = { engine: .55, skid: .5, crash: .9, nitro: .7, count: .8, go: .9, music: .3, rain: .35, thunder: .9, lava: .8, win: .9 };
+async function loadSounds() {
+  const ctx = audio.ctx;
+  await Promise.all(Object.keys(SOUND_FILES).map(async key => {
+    for (const name of SOUND_FILES[key]) {
+      try {
+        const r = await fetch('sounds/' + name + '.mp3'); if (!r.ok) continue;
+        audio.buf[key] = await ctx.decodeAudioData(await r.arrayBuffer()); return;
+      } catch (e) { /* not there / not decodable: try the next name, else keep the synth sound */ }
+    }
+  }));
+}
+function playBuf(key, vol, rate, delay) {
+  const b = audio.buf[key]; if (!b || !audio.ctx || !audio.on) return false;
+  const ctx = audio.ctx, src = ctx.createBufferSource(), g = ctx.createGain();
+  src.buffer = b; if (rate) src.playbackRate.value = rate; g.gain.value = (vol == null ? 1 : vol) * (SOUND_VOL[key] || 1);
+  src.connect(g); g.connect(audio.master); src.start(ctx.currentTime + (delay || 0)); return true;
+}
+function startLoop(key) {      // looping mp3 whose gain / pitch is driven every frame
+  const b = audio.buf[key], ctx = audio.ctx; if (!b || audio.loops[key]) return audio.loops[key] || null;
+  const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = b; src.loop = true; g.gain.value = 0; src.connect(g); g.connect(audio.master); src.start();
+  return (audio.loops[key] = { src, g });
+}
+function loopSet(key, gain, rate) {
+  const l = audio.loops[key]; if (!l) return; const t = audio.ctx.currentTime;
+  l.g.gain.setTargetAtTime(audio.on ? gain * (SOUND_VOL[key] || 1) : 0, t, .08); if (rate) l.src.playbackRate.setTargetAtTime(rate, t, .06);
+}
 function audioInit() {
   if (audio.ctx) { if (audio.ctx.state === 'suspended') audio.ctx.resume(); return; }
   try {
@@ -763,22 +797,26 @@ function audioInit() {
     const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 900; const wd = ctx.createGain(); wd.gain.value = 0;   // wind / rain rush
     ns.connect(bp); bp.connect(sq); sq.connect(master); ns.connect(lp2); lp2.connect(gr); gr.connect(master); ns.connect(hp); hp.connect(wd); wd.connect(master); ns.start();
     Object.assign(audio, { o1, o2, lp, eg, sq, gr, wd });
+    loadSounds();
   } catch (e) { audio.ctx = null; }
 }
 function beep(freq, dur) {
   if (!audio.ctx || !audio.on) return;
+  if (dur > .4 && playBuf('go')) return; if (dur <= .4 && playBuf('count')) return;
   const ctx = audio.ctx, o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime;
   o.type = 'sine'; o.frequency.value = freq; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.35, t + .02); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
   o.connect(g); g.connect(audio.master); o.start(t); o.stop(t + dur + .05);
 }
 function bump(strong) {
   if (!audio.ctx || !audio.on) return;
+  if (playBuf('crash', strong ? 1 : .65)) return;
   const ctx = audio.ctx, o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime;
   o.type = strong ? 'sawtooth' : 'triangle'; o.frequency.setValueAtTime(strong ? 160 : 120, t); o.frequency.exponentialRampToValueAtTime(40, t + .25); g.gain.setValueAtTime(strong ? .7 : .5, t); g.gain.exponentialRampToValueAtTime(.0001, t + .3);
   o.connect(g); g.connect(audio.master); o.start(t); o.stop(t + .35);
 }
 function whoosh() {
   if (!audio.ctx || !audio.on) return;
+  if (playBuf('nitro')) return;
   const ctx = audio.ctx, o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime;
   o.type = 'sawtooth'; o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(1100, t + .4);
   g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.16, t + .08); g.gain.exponentialRampToValueAtTime(.0001, t + .5);
@@ -786,6 +824,7 @@ function whoosh() {
 }
 function thunder(delay) {
   if (!audio.ctx || !audio.on || !audio.noise) return;
+  if (playBuf('thunder', 1, 0, delay)) return;
   const ctx = audio.ctx, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(), t = ctx.currentTime + delay;
   s.buffer = audio.noise; f.type = 'lowpass'; f.frequency.setValueAtTime(500, t); f.frequency.exponentialRampToValueAtTime(70, t + 1.6);
   g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.9, t + .05); g.gain.exponentialRampToValueAtTime(.0001, t + 1.8);
@@ -805,8 +844,19 @@ function audioUpdate(c, active) {
   audio.sq.gain.setTargetAtTime(active && (c.drifting || (c.braking && c.vf > 22)) ? clamp(Math.abs(c.vl) * .012 + (c.braking ? .03 : 0), .02, .11) : 0, t, .06);
   audio.gr.gain.setTargetAtTime(active && !c.onRoad && c.speed > 4 ? clamp(c.speed * .004, .02, .12) : 0, t, .08);
   audio.wd.gain.setTargetAtTime(active ? clamp((c.speed / 60 - .25) * .1, 0, .12) + (settings.storm ? .035 : 0) : 0, t, .1);
+  // mp3 loops (take over from the synthesised engine / skid / rain when the file exists)
+  if (audio.buf.engine) {
+    startLoop('engine'); audio.eg.gain.setTargetAtTime(0, t, .05);
+    loopSet('engine', active ? .55 + .45 * c.throttleLevel : 0, clamp(.55 + (sp / PARAMS.vmax) * 1.5 + (c.boosting ? .15 : 0), .5, 2.4));
+  }
+  if (audio.buf.skid) {
+    startLoop('skid'); audio.sq.gain.setTargetAtTime(0, t, .05);
+    loopSet('skid', active && (c.drifting || (c.braking && c.vf > 22)) ? clamp(Math.abs(c.vl) * .08 + (c.braking ? .4 : 0), .25, 1) : 0, 1);
+  }
+  if (audio.buf.rain) { startLoop('rain'); loopSet('rain', active && settings.storm ? 1 : 0, 1); }
+  if (audio.buf.music) { startLoop('music'); loopSet('music', active ? 1 : .6, 1); }
 }
-function audioSilence() { if (audio.eg) { const t = audio.ctx.currentTime; for (const n of ['eg', 'sq', 'gr', 'wd']) audio[n].gain.setTargetAtTime(0, t, .05); } }
+function audioSilence() { if (audio.eg) { const t = audio.ctx.currentTime; for (const n of ['eg', 'sq', 'gr', 'wd']) audio[n].gain.setTargetAtTime(0, t, .05); for (const k in audio.loops) if (k !== 'music') loopSet(k, 0); } }
 function setSound(on) {
   audio.on = on; settings.sound = on; store.set('sound', on);
   if (audio.master) audio.master.gain.setTargetAtTime(on ? .8 : 0, audio.ctx.currentTime, .05);
@@ -966,6 +1016,7 @@ function finishRace() {
     li.append(a, b); ul.appendChild(li);
   });
   setTimeout(() => { if (state === 'finished') { state = 'result'; wakeOff(); camTransit = 1.6; setHud(false); showSheet('result'); audioSilence(); } }, 1600);
+  if (place === 1) playBuf('win');
   toast(place === 1 ? 'You won!' : 'Race complete!', 1500);
 }
 
@@ -996,7 +1047,7 @@ function simStep(dt) {
       if (EVT.pad) { toast('BOOST!', 900); whoosh(); fovBoost = 1; shake = Math.max(shake, .3); }
       if (EVT.oil) toast('Oil slick!', 1000);
       if (EVT.hit > 2) { bump(true); shake = Math.max(shake, Math.min(1, EVT.hit / 40)); }
-      if (EVT.burn) { toast('Lava! Back on the road…', 1600); bump(true); shake = 1; }
+      if (EVT.burn) { toast('Lava! Back on the road…', 1600); if (!playBuf('lava')) bump(true); shake = 1; }
       if (!wasNitro && c.nitroOn) whoosh();
       topSpeed = Math.max(topSpeed, c.speed);
     }
