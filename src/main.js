@@ -894,6 +894,9 @@ const player = racers[0];
 let vis = [];                    // visuals, same order as racers
 let state = 'menu', paused = false, raceT = 0, simT = 0, countT = 0, lastCount = 4, bestTime = store.get('best2', 0), topSpeed = 0;
 const finishList = [];
+// showcase (start menu): turntable spin, slide-in when the car changes, and the camera's right vector
+const show = { spin: 0, slide: 0, y: .08, rx: 1, rz: 0, drag: false, idle: 0 };
+let stage = null;
 const input = { throttle: 0, brake: 0, steer: 0, hand: false, nitro: false };
 const keys = Object.create(null), touchState = { left: false, right: false, gas: false, brake: false, hand: false, nitro: false };
 const COAST = { throttle: 0, brake: .35, steer: 0, hand: false, nitro: false };
@@ -934,11 +937,16 @@ function setCar(id) {
   buildGrid(); refreshMenu();
   renderer.compile(scene, camera);   // compile any new shaders now, behind the menu, instead of stuttering at the race start
 }
+function cycleCar(d) {
+  const n = MODEL_IDS.length, i = (MODEL_IDS.indexOf(settings.car) + d + n) % n;
+  setCar(MODEL_IDS[i]); show.slide = d * 9;
+}
 function setPlayerColor(i) {
   settings.color = i; store.set('color2', i);
   if (vis.length) buildGrid();
   document.querySelectorAll('.swatch').forEach((b, k) => { b.classList.toggle('sel', k === i); b.setAttribute('aria-pressed', String(k === i)); });
   setText($('colorName'), COLORS[i].name); $('menu').style.setProperty('--car', colorFor(i));
+  if (stage) stage.userData.ring.color.set(colorFor(i));
 }
 function setWeather(storm2) {
   settings.storm = storm2; store.set('storm', storm2); applyWeather(); refreshMenu();
@@ -958,7 +966,9 @@ function resetRace() {
 }
 function applyVisuals(c, v, dt) {
   const sink = c.fallT > 0 ? Math.min(2.6, (1.5 - c.fallT) * 2.2) : 0;
-  v.root.position.set(c.x, -sink, c.z); v.root.rotation.y = c.h;
+  const showing = state === 'menu' && c.role === 'player';
+  if (showing) { v.root.position.set(c.x + show.rx * show.slide, -sink + show.y, c.z + show.rz * show.slide); v.root.rotation.y = c.h + show.spin; }
+  else { v.root.position.set(c.x, -sink, c.z); v.root.rotation.y = c.h; }
   v.shadow.visible = sink === 0;
   v.tilt.visible = !(c.ghostT > 0) || (((performance.now() / 90) | 0) & 1) === 0;
   const acc = dt > 0 ? (c.vf - v.prevVf) / dt : 0; v.prevVf = c.vf; v.accel += (clamp(acc, -40, 25) - v.accel) * Math.min(1, dt * 6);
@@ -979,6 +989,11 @@ function applyVisuals(c, v, dt) {
 // ======================= input =======================
 const KEYMAP = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'hand', ShiftLeft: 'nitro', ShiftRight: 'nitro', KeyN: 'nitro' };
 addEventListener('keydown', e => {
+  if (state === 'menu' && !$('menu').hidden) {
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') { if (!e.repeat) cycleCar(-1); e.preventDefault(); return; }
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') { if (!e.repeat) cycleCar(1); e.preventDefault(); return; }
+    if (e.code === 'Enter' && !(document.activeElement && document.activeElement.tagName === 'BUTTON')) { startCountdown(); return; }
+  }
   if (e.code === 'Escape' || e.code === 'KeyP') { if (state === 'racing' || state === 'countdown') setPaused(!paused); return; }
   if (e.code === 'KeyR' && (state === 'racing')) { respawnPlayer(); return; }
   if (e.code === 'KeyC' && !e.repeat && (state === 'racing' || state === 'countdown' || state === 'finished')) { cycleCamera(1); return; }
@@ -1099,7 +1114,11 @@ function updateCamera(dt, t) {
   const c = player, orbit = state === 'menu' || state === 'result', mode = CAMS[settings.cam].id;
   const sf = clamp(c.speed / PARAMS.vmax, 0, 1);
   let tf = 60, hard = false;
-  if (orbit) {
+  if (state === 'menu') {      // showcase: fixed 3/4 view, the car turns on its platform
+    const R = clamp(8.6 / Math.max(camera.aspect, .01), 9, 20), a = .62;
+    tPos.set(c.x + Math.sin(c.h + a) * R, 1.6 + R * .13, c.z + Math.cos(c.h + a) * R); tLook.set(c.x, .75 - R * .09, c.z);
+    const fx = tLook.x - tPos.x, fz = tLook.z - tPos.z, fl = Math.hypot(fx, fz) || 1; show.rx = -fz / fl; show.rz = fx / fl;
+  } else if (orbit) {
     const a = t * .22 + .9; tPos.set(c.x + Math.sin(c.h + a) * 9.5, 2.5 + Math.sin(t * .3) * .3, c.z + Math.cos(c.h + a) * 9.5); tLook.set(c.x, .9, c.z);
   } else {
     const fast = mode === 'hood' || mode === 'bumper';
@@ -1136,7 +1155,7 @@ function updateCamera(dt, t) {
   camera.position.copy(camPos); camera.lookAt(camLook);
   if (sh > .002 && !orbit) camera.position.set(camPos.x + (Math.random() - .5) * sh, camPos.y + (Math.random() - .5) * sh, camPos.z + (Math.random() - .5) * sh);
   fovBoost += ((c.boosting && !orbit ? 1 : 0) - fovBoost) * Math.min(1, dt * 3);
-  const target = (orbit ? 60 : tf) + fovBoost * 12;
+  const target = (state === 'menu' ? 40 : orbit ? 60 : tf) + fovBoost * 12;
   fovNow += (target - fovNow) * Math.min(1, dt * 4);
   if (Math.abs(camera.fov - fovNow) > .05) { camera.fov = fovNow; camera.updateProjectionMatrix(); }
 }
@@ -1215,12 +1234,28 @@ function updateHud() {
   }
 }
 
+// ======================= showcase platform (start menu) =======================
+function buildStage() {
+  stage = new THREE.Group(); stage.visible = false;
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(3.7, 3.85, .16, 72), new THREE.MeshBasicMaterial({ color: '#171a20' }));
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(3.72, .05, 8, 96), new THREE.MeshBasicMaterial({ color: '#c91420' })); rim.rotation.x = Math.PI / 2; rim.position.y = .08;
+  const tickMat = new THREE.MeshBasicMaterial({ color: '#4a5260' });
+  for (let i = 0; i < 48; i++) {   // marks around the edge so the turning platform is visible
+    const t = new THREE.Mesh(new THREE.BoxGeometry(.09, .01, i % 4 ? .32 : .6), tickMat), a = i / 48 * Math.PI * 2;
+    t.position.set(Math.sin(a) * 3.3, .085, Math.cos(a) * 3.3); t.rotation.y = a; stage.add(t);
+  }
+  stage.add(disc, rim); stage.userData.ring = rim.material; scene.add(stage);
+}
+
 // ======================= menu =======================
 function refreshMenu() {
-  setText($('menuBest'), bestTime ? 'Your best time  ' + fmt(bestTime) : 'No race record yet');
-  document.querySelectorAll('.caropt').forEach(b => { const on = b.dataset.car === settings.car; b.classList.toggle('sel', on); b.setAttribute('aria-pressed', String(on)); });
+  setText($('menuBest'), bestTime ? 'Best time  ' + fmt(bestTime) : 'No race record yet');
+  const m = MODEL_BY[settings.car], idx = MODEL_IDS.indexOf(settings.car);
+  setText($('carName'), m.name); setText($('carTag'), m.tag); setText($('carCount'), (idx + 1) + ' / ' + MODEL_LIST.length);
+  const rel = k => { const vs = MODEL_LIST.map(x => x[k]), lo = Math.min(...vs), hi = Math.max(...vs); return Math.round(28 + (m[k] - lo) / ((hi - lo) || 1) * 72); };
+  $('barTop').style.width = rel('top') + '%'; $('barAcc').style.width = rel('acc') + '%';
+  document.querySelectorAll('.cardot').forEach((b, k) => { b.classList.toggle('sel', k === idx); b.setAttribute('aria-current', String(k === idx)); });
   document.querySelectorAll('.wxopt').forEach(b => { const on = (b.dataset.wx === 'storm') === settings.storm; b.classList.toggle('sel', on); b.setAttribute('aria-pressed', String(on)); });
-  const m = MODEL_BY[settings.car]; setText($('carBlurb'), m.name + ' — ' + m.tag + ' · rivals: ' + MODEL_LIST.filter(x => x.id !== settings.car).map(x => x.rival).join(', '));
   const ag = $('autoGas'); if (ag) { ag.classList.toggle('sel', settings.autoGas); ag.setAttribute('aria-pressed', String(settings.autoGas)); }
 }
 function initMenu() {
@@ -1229,13 +1264,19 @@ function initMenu() {
     const b = document.createElement('button'); b.className = 'swatch'; b.style.setProperty('--c', c.hex); b.setAttribute('aria-label', c.name); b.type = 'button';
     b.addEventListener('click', () => setPlayerColor(i)); wrap.appendChild(b);
   });
-  const seg = $('carSeg');
-  MODEL_LIST.forEach(m => {
-    const b = document.createElement('button'); b.className = 'caropt'; b.dataset.car = m.id; b.type = 'button'; b.textContent = m.name;
-    b.addEventListener('click', () => { if (m.id !== settings.car) setCar(m.id); }); seg.appendChild(b);
+  const dots = $('carDots');
+  MODEL_LIST.forEach((m, k) => {
+    const b = document.createElement('button'); b.className = 'cardot'; b.type = 'button'; b.setAttribute('aria-label', m.name);
+    b.addEventListener('click', () => { const cur = MODEL_IDS.indexOf(settings.car); if (k !== cur) { setCar(m.id); show.slide = k > cur ? 9 : -9; } }); dots.appendChild(b);
   });
+  $('carPrev').addEventListener('click', () => cycleCar(-1));
+  $('carNext').addEventListener('click', () => cycleCar(1));
+  const stg = $('menuStage'); let dragX = 0, dragId = null;      // drag the showcase to turn the car by hand
+  stg.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; dragId = e.pointerId; dragX = e.clientX; show.drag = true; try { stg.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ } });
+  stg.addEventListener('pointermove', e => { if (e.pointerId !== dragId) return; show.spin += (e.clientX - dragX) * .012; dragX = e.clientX; });
+  for (const t of ['pointerup', 'pointercancel']) stg.addEventListener(t, e => { if (e.pointerId === dragId) { dragId = null; show.drag = false; } });
   document.querySelectorAll('.wxopt').forEach(b => b.addEventListener('click', () => setWeather(b.dataset.wx === 'storm')));
-  if (isTouch) { $('autoGasRow').hidden = false; $('autoGas').addEventListener('click', () => { settings.autoGas = !settings.autoGas; store.set('autoGas', settings.autoGas); refreshMenu(); }); }
+  if (isTouch) { $('autoGas').hidden = false; $('autoGas').addEventListener('click', () => { settings.autoGas = !settings.autoGas; store.set('autoGas', settings.autoGas); refreshMenu(); }); }
   $('btnStart').addEventListener('click', startCountdown);
   $('btnAgain').addEventListener('click', startCountdown);
   $('btnMenu').addEventListener('click', goMenu);
@@ -1263,7 +1304,7 @@ function frame(now) {
   let raw = (now - last) / 1000; last = now; if (raw > .25) raw = .25; if (raw <= 0) return;
   // adaptive resolution: drop pixel ratio as soon as the game falls under ~50 fps, never raise past the level that failed.
   // Only frames that actually render count (the menu skips rendering, so its fast frames would hide a slow race).
-  if (state !== 'menu' && raw < .1) { ftAcc += raw * 1000; ftN++; }
+  if (raw < .1) { ftAcc += raw * 1000; ftN++; }
   if (now - lastAdapt > 1000) {
     lastAdapt = now;
     if (ftN >= 20 && ++warm > 1) {   // the first window after a (re)start holds shader-compile hitches, so it is ignored
@@ -1280,6 +1321,7 @@ function frame(now) {
     if (n === 5) acc = 0;
   }
   const dtv = paused ? 0 : raw;
+  if (state === 'menu') { if (!show.drag) show.spin += raw * .5; show.slide *= Math.exp(-raw * 6.5); }
   for (let k = 0; k < 5; k++) applyVisuals(racers[k], vis[k], dtv || .0001);
   if (running) {
     for (let k = 0; k < 5; k++) {
@@ -1298,8 +1340,10 @@ function frame(now) {
   }
   if (audio.ctx && (now | 0) % 4 === 0) audioKeepAlive();
   updateCamera(raw, now / 1000);
-  if (state === 'menu') return;   // the full-screen menu covers the scene: don't spend battery rendering it
-  const tags = !(state !== 'result' && (CAMS[settings.cam].id === 'hood' || CAMS[settings.cam].id === 'bumper'));
+  const inMenu = state === 'menu';   // the menu is a live showcase: the rivals step out of the picture and the platform appears
+  if (stage) { stage.visible = inMenu; if (inMenu) { stage.position.set(player.x, 0, player.z); stage.rotation.y = show.spin; } }
+  for (let k = 1; k < 5; k++) vis[k].root.visible = !inMenu;
+  const tags = !inMenu && !(state !== 'result' && (CAMS[settings.cam].id === 'hood' || CAMS[settings.cam].id === 'bumper'));
   for (let k = 0; k < 5; k++) { const v = vis[k], c = racers[k]; v.tag.visible = k === 0 ? tags : (Math.abs(c.x - camPos.x) + Math.abs(c.z - camPos.z) < 260); }
   updateSmoke(dtv); updateScenery(dtv, simT); updateStorm(dtv); updateRain(dtv); drawFx(now / 1000, running);
   renderer.render(scene, camera);
@@ -1318,7 +1362,7 @@ async function boot() {
   const rest = MODEL_IDS.filter(id => id !== settings.car);
   for (let i = 0; i < rest.length; i++) { await bootStep(18 + i * 13, 'Building rival ' + (i + 1) + ' of 4…'); ensureModel(rest[i]); }
   await bootStep(74, 'Laying the track and hazards…');
-  buildTrackVisuals(track); initSmoke(); initRain(); initFx();
+  buildTrackVisuals(track); buildStage(); initSmoke(); initRain(); initFx();
   await bootStep(86, 'Painting and fuelling up…');
   initMenu(); initHud(); resize(); applyWeather();
   buildGrid(); camPos.set(player.x + 8, 3, player.z - 8); camLook.set(player.x, .9, player.z);
