@@ -749,11 +749,10 @@ const audio = { buf: {}, loops: {}, ctx: null, on: settings.sound, o1: null, o2:
 // ---- optional mp3 files in the sounds/ folder. Any file that is missing simply keeps the built-in beep/synth sound. ----
 // (race1.mp3 and huarn.mp3 are intentionally NOT used.)
 const SOUND_FILES = {
-  engine: ['engine', 'engine_loop', 'engine1'], skid: ['skid', 'drift', 'tire', 'screech'], crash: ['crash', 'hit', 'bump'],
-  nitro: ['nitro', 'boost', 'whoosh'], count: ['count', 'countdown', 'beep'], go: ['go', 'start'], music: ['music', 'bgm', 'theme'],
-  rain: ['rain', 'storm'], thunder: ['thunder'], lava: ['lava', 'burn'], win: ['win', 'finish', 'victory']
+  engine: ['engine', 'engine_loop', 'engine1'], skid: ['skid', 'drift', 'tire', 'screech'],
+  nitro: ['nitro', 'boost', 'whoosh'], count: ['count', 'countdown', 'beep'], go: ['go', 'start'], music: ['music', 'bgm', 'theme']
 };
-const SOUND_VOL = { engine: .55, skid: .5, crash: .9, nitro: .7, count: .8, go: .9, music: .3, rain: .35, thunder: .9, lava: .8, win: .9 };
+const SOUND_VOL = { engine: .55, skid: .5, crash: .9, nitro: .7, count: .8, go: .9, music: .16, rain: .35, thunder: .9, lava: .8, win: .9 };
 async function loadSounds() {
   const ctx = audio.ctx;
   await Promise.all(Object.keys(SOUND_FILES).map(async key => {
@@ -808,6 +807,7 @@ function beep(freq, dur) {
   o.connect(g); g.connect(audio.master); o.start(t); o.stop(t + dur + .05);
 }
 function bump(strong) {
+  return;   // impact sounds removed (kept sound: engine, countdown, soft music, nitro, tyre screech)
   if (!audio.ctx || !audio.on) return;
   if (playBuf('crash', strong ? 1 : .65)) return;
   const ctx = audio.ctx, o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime;
@@ -823,6 +823,7 @@ function whoosh() {
   o.connect(g); g.connect(audio.master); o.start(t); o.stop(t + .55);
 }
 function thunder(delay) {
+  return;   // removed
   if (!audio.ctx || !audio.on || !audio.noise) return;
   if (playBuf('thunder', 1, 0, delay)) return;
   const ctx = audio.ctx, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(), t = ctx.currentTime + delay;
@@ -842,8 +843,6 @@ function audioUpdate(c, active) {
   audio.lp.frequency.setTargetAtTime(380 + r * 900 + c.throttleLevel * 500, t, .08);
   audio.eg.gain.setTargetAtTime(active ? .05 + .07 * c.throttleLevel + .03 * r : 0, t, .08);
   audio.sq.gain.setTargetAtTime(active && (c.drifting || (c.braking && c.vf > 22)) ? clamp(Math.abs(c.vl) * .012 + (c.braking ? .03 : 0), .02, .11) : 0, t, .06);
-  audio.gr.gain.setTargetAtTime(active && !c.onRoad && c.speed > 4 ? clamp(c.speed * .004, .02, .12) : 0, t, .08);
-  audio.wd.gain.setTargetAtTime(active ? clamp((c.speed / 60 - .25) * .1, 0, .12) + (settings.storm ? .035 : 0) : 0, t, .1);
   // mp3 loops (take over from the synthesised engine / skid / rain when the file exists)
   if (audio.buf.engine) {
     startLoop('engine'); audio.eg.gain.setTargetAtTime(0, t, .05);
@@ -853,7 +852,6 @@ function audioUpdate(c, active) {
     startLoop('skid'); audio.sq.gain.setTargetAtTime(0, t, .05);
     loopSet('skid', active && (c.drifting || (c.braking && c.vf > 22)) ? clamp(Math.abs(c.vl) * .08 + (c.braking ? .4 : 0), .25, 1) : 0, 1);
   }
-  if (audio.buf.rain) { startLoop('rain'); loopSet('rain', active && settings.storm ? 1 : 0, 1); }
   if (audio.buf.music) { startLoop('music'); loopSet('music', active ? 1 : .6, 1); }
 }
 function audioSilence() { if (audio.eg) { const t = audio.ctx.currentTime; for (const n of ['eg', 'sq', 'gr', 'wd']) audio[n].gain.setTargetAtTime(0, t, .05); for (const k in audio.loops) if (k !== 'music') loopSet(k, 0); } }
@@ -1016,7 +1014,6 @@ function finishRace() {
     li.append(a, b); ul.appendChild(li);
   });
   setTimeout(() => { if (state === 'finished') { state = 'result'; wakeOff(); camTransit = 1.6; setHud(false); showSheet('result'); audioSilence(); } }, 1600);
-  if (place === 1) playBuf('win');
   toast(place === 1 ? 'You won!' : 'Race complete!', 1500);
 }
 
@@ -1044,10 +1041,10 @@ function simStep(dt) {
     updateTrackState(c, track, false);
     applyHazards(c, HZ, track, simT, EVT);
     if (k === 0) {
-      if (EVT.pad) { toast('BOOST!', 900); whoosh(); fovBoost = 1; shake = Math.max(shake, .3); }
+      if (EVT.pad) { toast('BOOST!', 900); fovBoost = 1; shake = Math.max(shake, .3); }
       if (EVT.oil) toast('Oil slick!', 1000);
       if (EVT.hit > 2) { bump(true); shake = Math.max(shake, Math.min(1, EVT.hit / 40)); }
-      if (EVT.burn) { toast('Lava! Back on the road…', 1600); if (!playBuf('lava')) bump(true); shake = 1; }
+      if (EVT.burn) { toast('Lava! Back on the road…', 1600); shake = 1; }
       if (!wasNitro && c.nitroOn) whoosh();
       topSpeed = Math.max(topSpeed, c.speed);
     }
