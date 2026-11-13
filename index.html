@@ -51,20 +51,19 @@ button:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
 .pill { background: var(--chip); padding: 5px 12px; border-radius: 999px; font: 800 14px/1.5 var(--f-ur); white-space: nowrap; }
 .pill.lead { background: var(--ink); color: var(--paper); }
 #mini { width: 132px; height: 108px; background: var(--chip); border-radius: 14px; display: block; }
-.hud-tc { position: absolute; left: 50%; top: max(10px, env(safe-area-inset-top, 0px)); transform: translateX(-50%); text-align: center; }
-#timer { display: block; background: var(--ink); color: var(--paper); border-radius: 14px; padding: 4px 16px; font: 800 26px/1.3 var(--f-num); font-variant-numeric: tabular-nums; min-width: 6.4ch; }
-#bestline { display: inline-block; margin-top: 4px; background: var(--chip); border-radius: 999px; padding: 1px 10px; font: 600 12px/1.6 var(--f-ur); direction: ltr; }
+.hud-tc { position: absolute; left: 50%; top: max(10px, env(safe-area-inset-top, 0px)); transform: translateX(-50%); text-align: center; display: grid; gap: 6px; justify-items: center; }
+
 .hud-tr { position: absolute; right: max(12px, env(safe-area-inset-right, 0px)); top: max(10px, env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; gap: 8px; }
 .ibtn { pointer-events: auto; width: 46px; height: 46px; border-radius: 50%; border: 0; background: var(--chip); color: var(--ink); display: grid; place-items: center; padding: 0; }
 .ibtn svg { width: 22px; height: 22px; }
 .ibtn.off .wave { display: none; } .ibtn:not(.off) .mute { display: none; }
-.speedo { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom, 0px)); background: var(--chip); border-radius: 18px; padding: 8px 16px 10px; text-align: center; min-width: 150px; direction: ltr; }
+.speedo { background: var(--chip); border-radius: 16px; padding: 5px 14px 7px; text-align: center; min-width: 176px; direction: ltr; }
 .speedo .row { display: flex; align-items: baseline; justify-content: center; gap: 6px; }
-#spd { font: 800 46px/1 var(--f-num); font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
-.speedo small { font: 800 12px var(--f-num); color: var(--ink-2); letter-spacing: .08em; }
-#gear { font: 800 16px var(--f-num); background: var(--ink); color: var(--paper); border-radius: 8px; padding: 1px 8px; margin-left: 6px; }
-#rpm { display: flex; gap: 3px; margin-top: 7px; }
-#rpm i { flex: 1; height: 7px; border-radius: 3px; background: var(--line); }
+#spd { font: 800 34px/1 var(--f-num); font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
+.speedo small { font: 800 11px var(--f-num); color: var(--ink-2); letter-spacing: .08em; }
+#gear { font: 800 14px var(--f-num); background: var(--ink); color: var(--paper); border-radius: 8px; padding: 1px 8px; margin-left: 6px; }
+#rpm { display: flex; gap: 3px; margin-top: 5px; }
+#rpm i { flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
 #rpm i.on { background: var(--ink); } #rpm i.on.hot { background: var(--red); }
 .banner { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%); font: 800 20px var(--f-ur); text-align: center; white-space: nowrap; }
 .banner.count { font: 800 clamp(96px, 22vmin, 190px)/1 var(--f-num); color: #fff; text-shadow: 0 4px 0 rgba(29, 53, 36, .55), 0 0 30px rgba(29, 53, 36, .35); }
@@ -78,14 +77,22 @@ button:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
 #touch { position: fixed; inset: 0; }
 #touch button { pointer-events: auto; touch-action: none; border: 2px solid var(--line); background: rgba(247, 250, 244, .62); color: var(--ink); border-radius: 22px; display: grid; place-items: center; font: 800 13px var(--f-ur); padding: 0; transition: transform .06s, background .06s; }
 #touch button.on { transform: scale(.94); background: var(--red); color: #fff; border-color: var(--red); }
-#touch svg { width: 34px; height: 34px; }
 .t-left { position: absolute; left: max(14px, env(safe-area-inset-left, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px)); display: flex; gap: 12px; }
 .t-left button { width: 84px; height: 96px; }
 .t-right { position: absolute; right: max(14px, env(safe-area-inset-right, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: auto auto; gap: 12px; align-items: end; }
-#tGas { width: 96px; height: 128px; font-size: 15px; } #tBrake { width: 84px; height: 96px; } #tHand { width: 84px; height: 44px; border-radius: 16px; grid-column: 2; }
-.portrait .speedo { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 172px); } .portrait .pills { flex-direction: column; align-items: flex-start; }
-.portrait .t-left button { width: 70px; height: 86px; } .portrait #tGas { width: 82px; height: 118px; } .portrait #tBrake { width: 70px; height: 86px; } .portrait #tHand { width: 70px; }
-@media (max-height: 460px) { #mini { width: 100px; height: 82px; } #spd { font-size: 36px; } .speedo { padding: 6px 12px 8px; } .t-left button, #tBrake { height: 80px; } #tGas { height: 108px; } }
+#touch svg { width: 28px; height: 28px; }
+#tNitro, #tHand { width: 58px; height: 52px; border-radius: 16px; } #tNitro { grid-column: 1; grid-row: 1; color: #0a2a66; position: relative; overflow: hidden; } #tHand { grid-column: 2; grid-row: 1; }
+#tBrake { grid-column: 1; grid-row: 2; width: 92px; height: 70px; } #tGas { grid-column: 2; grid-row: 2; width: 74px; height: 122px; }
+/* pedals: dark rubber pad with ribs, no lettering */
+#touch button.pedal { border: 0; border-radius: 16px 16px 12px 12px; background: linear-gradient(180deg, #4b5560, #2a3037); box-shadow: inset 0 2px 0 rgba(255, 255, 255, .22), 0 4px 0 #14181c, 0 6px 14px rgba(0, 0, 0, .35); position: relative; }
+.pedal i { position: absolute; inset: 10px 9px; border-radius: 8px; background: repeating-linear-gradient(180deg, #11151a 0 5px, #3a424b 5px 9px); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .08); }
+#tGas::after, #tBrake::after { content: ''; position: absolute; left: 14px; right: 14px; top: 0; height: 4px; border-radius: 0 0 4px 4px; }
+#tGas::after { background: #34c759; } #tBrake::after { background: #ff3b30; }
+#touch button.pedal.on { background: linear-gradient(180deg, #38424b, #1d2227); transform: translateY(4px) scale(.97); box-shadow: inset 0 2px 0 rgba(255, 255, 255, .12), 0 0 0 #14181c; border: 0; }
+#tGas.on i, #tBrake.on i { background: repeating-linear-gradient(180deg, #0b0e11 0 5px, #5a636d 5px 9px); }
+.portrait .pills { flex-direction: column; align-items: flex-start; } .portrait .hud-tc { top: max(10px, env(safe-area-inset-top, 0px)); } .portrait .speedo { min-width: 0; padding: 4px 10px 6px; } .portrait #spd { font-size: 26px; } .portrait #gear { font-size: 12px; padding: 1px 6px; margin-left: 2px; } .portrait #mini { width: 96px; height: 79px; } .portrait .pill { font-size: 12px; padding: 4px 10px; }
+.portrait .t-left button { width: 70px; height: 86px; } .portrait #tGas { width: 66px; height: 112px; } .portrait #tBrake { width: 80px; height: 64px; }
+@media (max-height: 460px) { #mini { width: 100px; height: 82px; } #spd { font-size: 28px; } .speedo { padding: 4px 12px 6px; min-width: 150px; } .t-left button { height: 80px; } #tBrake { height: 62px; } #tGas { height: 104px; } #tNitro, #tHand { height: 46px; } }
 
 /* sheets */
 .sheet { position: fixed; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding: 16px max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); direction: ltr; }
@@ -170,17 +177,21 @@ button:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
 #fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; display: block; }
 .seg.wrap { flex-wrap: wrap; } .seg.wrap button { flex: 1 1 30%; min-height: 42px; font-size: 14px; padding: 0 8px; }
 .blurb { font: 600 12.5px/1.6 var(--f-ur); color: var(--ink-2); }
-#board { position: absolute; right: calc(max(12px, env(safe-area-inset-right, 0px)) + 56px); top: max(10px, env(safe-area-inset-top, 0px)); margin: 0; padding: 5px 6px; list-style: none; background: var(--chip); border-radius: 12px; min-width: 124px; direction: ltr; }
-#board li { display: flex; align-items: center; gap: 6px; font: 800 12.5px/1.5 var(--f-num); padding: 1px 6px; border-radius: 8px; white-space: nowrap; }
-#board li b { width: 1em; text-align: center; } #board li i { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1.5px #fff; }
-#board li.you { background: #ffd23a; color: #1a1405; }
-#nitro { height: 7px; border-radius: 3px; background: var(--line); margin-top: 5px; overflow: hidden; }
+
+
+
+
+#nitro { height: 6px; border-radius: 3px; background: var(--line); margin-top: 4px; overflow: hidden; }
 #nitro i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #1e90ff, #6be3ff); border-radius: 3px; }
+#nitroBtnFill { position: absolute; left: 0; right: 0; bottom: 0; height: 100%; background: linear-gradient(0deg, #1e90ff, #6be3ff); opacity: .9; pointer-events: none; transition: height .1s linear; }
+#tNitro svg { position: relative; z-index: 1; }
+#tNitro.boost { box-shadow: 0 0 14px 3px rgba(80, 190, 255, .9); border-color: #6be3ff; }
+.is-touch #nitro { display: none; }
 #nitro.on { box-shadow: 0 0 10px 2px rgba(80, 190, 255, .8); }
-#tNitro { width: 84px; height: 44px; border-radius: 16px; grid-column: 1; grid-row: 2; color: #0b5cff; }
-.portrait #tNitro { width: 70px; } .portrait #board { top: auto; bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 250px); right: max(12px, env(safe-area-inset-right, 0px)); }
+
+
 #resLaps li.you { color: var(--ink); font-weight: 800; background: rgba(255, 210, 58, .35); border-radius: 8px; }
-@media (max-height: 460px) { #board { min-width: 104px; font-size: 11px; } #board li { font-size: 11px; line-height: 1.35; } }
+
 </style>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }
@@ -214,18 +225,15 @@ button:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
 
   <div id="hud" hidden>
     <div class="hud-tl">
-      <div class="pills"><span class="pill" id="lapPill">0%</span><span class="pill lead" id="posPill">Position 1/5</span></div>
+      <div class="pills"><span class="pill lead" id="posPill">Position 1/5</span></div>
       <canvas id="mini" width="132" height="108" aria-hidden="true"></canvas>
     </div>
-    <div class="hud-tc"><span id="timer" dir="ltr">0:00.00</span><span id="bestline">Best —</span></div>
+    <div class="hud-tc"><div class="speedo" id="speedo"><div class="row"><span id="spd">0</span><small>km/h</small><span id="gear">1</span></div><div id="rpm" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div id="nitro" title="Nitro (Shift / N)"><i id="nitroFill"></i></div></div></div>
     <div class="hud-tr">
       <button class="ibtn" id="btnPause" type="button" aria-label="Pause"><svg viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor"/></svg><span id="pauseBtnLabel" hidden></span></button>
-      <button class="ibtn" data-sound type="button" aria-label="Sound"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><g class="wave" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 8.5a5 5 0 010 7M18.5 6a8.5 8.5 0 010 12"/></g><g class="mute" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 9l5 6M21 9l-5 6"/></g></svg></button>
       <button class="ibtn" id="btnCam" type="button" aria-label="Change camera (C)"><svg viewBox="0 0 24 24"><path d="M9 4l-1.5 2H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-2.5L15 4zm3 4.5a4.2 4.2 0 110 8.400 4.2 4.2 0 010-8.400zm0 1.800a2.400 2.400 0 100 4.800 2.400 2.400 0 000-4.800z" fill="currentColor"/></svg></button>
       <button class="ibtn" id="btnRespawn" type="button" aria-label="Put the car back on the road"><svg viewBox="0 0 24 24"><path d="M12 5a7 7 0 107 7h-2.2A4.8 4.8 0 1112 7.2V10l4-4-4-4v3z" fill="currentColor"/></svg></button>
     </div>
-    <div class="speedo" id="speedo"><div class="row"><span id="spd">0</span><small>km/h</small><span id="gear">1</span></div><div id="rpm" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div id="nitro" title="Nitro (Shift / N)"><i id="nitroFill"></i></div></div>
-    <ol id="board" aria-label="Race order"></ol>
     <div class="banner" id="banner"></div>
     <div id="wrong" hidden>Wrong way!</div>
   </div>
@@ -236,10 +244,10 @@ button:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
       <button id="tRight" type="button" aria-label="Steer right"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
     </div>
     <div class="t-right">
-      <button id="tBrake" type="button" aria-label="Brake">BRAKE</button>
-      <button id="tGas" type="button" aria-label="Accelerator">GAS</button>
-      <button id="tHand" type="button" aria-label="Handbrake">DRIFT</button>
-      <button id="tNitro" type="button" aria-label="Nitro">NITRO</button>
+      <button id="tNitro" type="button" aria-label="Nitro"><b id="nitroBtnFill"></b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.500 2c.4 3.200-1.200 4.800-2.700 6.600C9.300 10.400 8 12 8 14.300 8 17 9.900 19 12.200 19c2.600 0 4.300-2 4.300-4.600 0-1.600-.7-2.800-1.600-4 .1 1.200-.4 2.100-1.200 2.600.6-3.500-.2-8-.2-11zM12 21.500c-2.800 0-4.800-1.300-5.600-3.300.9.600 2 .9 3 .9z" fill="currentColor"/></svg></button>
+      <button id="tHand" type="button" aria-label="Handbrake / drift"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.600" stroke-linecap="round" aria-hidden="true"><path d="M5 19c0-6 3-9 7-9s7 3 7 9"/><path d="M2.500 14l2.500 5 3-4M21.500 14L19 19l-3-4" stroke-linejoin="round"/></svg></button>
+      <button id="tBrake" class="pedal" type="button" aria-label="Brake"><i></i></button>
+      <button id="tGas" class="pedal" type="button" aria-label="Accelerator"><i></i></button>
     </div>
   </div>
 
@@ -4488,9 +4496,10 @@ function drawFx(t, on) {
 // ======================= HUD =======================
 const el = {};
 const miniBase = document.createElement('canvas');
-let miniMap = null, boardRows = [];
+let miniMap = null;
 function initHud() {
-  for (const id of ['spd', 'gear', 'timer', 'bestline', 'lapPill', 'posPill', 'wrong', 'nitroFill', 'board']) el[id] = $(id);
+  for (const id of ['spd', 'gear', 'posPill', 'wrong', 'nitroFill', 'nitroBtnFill', 'tNitro']) el[id] = $(id);
+  document.documentElement.classList.toggle('is-touch', isTouch);
   el.rpm = [...document.querySelectorAll('#rpm i')]; el.mini = $('mini'); el.mctx = el.mini.getContext('2d');
   const W = el.mini.width, H = el.mini.height, pad = 10, s = Math.min((W - pad * 2) / (TB.maxX - TB.minX), (H - pad * 2) / (TB.maxZ - TB.minZ));
   const ox = (W - (TB.maxX - TB.minX) * s) / 2, oz = (H - (TB.maxZ - TB.minZ) * s) / 2, minX = TB.minX, minZ = TB.minZ;
@@ -4504,11 +4513,6 @@ function initHud() {
   g.strokeStyle = '#ff6a1a'; g.lineWidth = 4.5;      // lava zones in orange
   for (const z of HZ.lava) { g.beginPath(); const n = (z.i1 - z.i0 + track.N) % track.N; for (let k = 0; k <= n; k += 2) { const p = P((z.i0 + k) % track.N); k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); } g.stroke(); }
   g.fillStyle = '#1d3524'; const p0 = P(0); g.fillRect(p0[0] - 1.5, p0[1] - 4, 3, 8);
-  el.board.textContent = ''; boardRows = [];
-  for (let i = 0; i < 5; i++) {
-    const li = document.createElement('li'), n = document.createElement('b'), d = document.createElement('i'), s2 = document.createElement('span');
-    li.append(n, d, s2); el.board.appendChild(li); boardRows.push({ li, n, d, s: s2 });
-  }
 }
 let hudTick = 0;
 function updateHud() {
@@ -4519,16 +4523,13 @@ function updateHud() {
   setText(el.gear, c.vf < -0.5 ? 'R' : String(g));
   if (el.rpm._on !== on) { el.rpm._on = on; el.rpm.forEach((s, i) => s.classList.toggle('on', i < on)); el.rpm.forEach((s, i) => s.classList.toggle('hot', i >= 9)); }
   const ranked = rankCars(racers), place = ranked.indexOf(player) + 1;
-  const pct = clamp(c.prog / track.N, 0, 1);
-  setText(el.lapPill, Math.round(pct * 100) + '% · ' + (pct * track.len / 1000).toFixed(1) + '/' + (track.len / 1000).toFixed(1) + ' km');
   setText(el.posPill, 'Position ' + place + '/5'); el.posPill.classList.toggle('lead', place === 1);
-  setText(el.timer, fmt(state === 'countdown' ? 0 : raceT));
-  setText(el.bestline, bestTime ? 'Best ' + fmt(bestTime) : 'Best —');
-  el.nitroFill.style.width = Math.round(c.nitro) + '%'; el.nitroFill.parentNode.classList.toggle('on', c.nitroOn || c.boosting);
+  const nit = Math.round(c.nitro), nOn = c.nitroOn || c.boosting;
+  el.nitroFill.style.width = nit + '%'; el.nitroFill.parentNode.classList.toggle('on', nOn);
+  el.nitroBtnFill.style.height = nit + '%'; el.tNitro.classList.toggle('boost', nOn);
   const wrong = state === 'racing' && c.speed > 5 && (c.vx * track.tx[c.idx] + c.vz * track.tz[c.idx]) < -3;
   el.wrong.hidden = !wrong;
   if ((hudTick++ & 1) === 0) {
-    for (let i = 0; i < 5; i++) { const rc = ranked[i], row = boardRows[i]; setText(row.n, String(i + 1)); setText(row.s, rc.name); row.d.style.background = rc.colorHex; row.li.classList.toggle('you', rc === player); }
     const g2 = el.mctx, m = miniMap; g2.clearRect(0, 0, el.mini.width, el.mini.height); g2.drawImage(miniBase, 0, 0);
     const dot = (cc, col, rad, ring) => { g2.beginPath(); g2.arc(m.ox + (cc.x - m.minX) * m.s, m.oz + (cc.z - m.minZ) * m.s, rad, 0, 6.2832); g2.fillStyle = col; g2.fill(); g2.lineWidth = ring ? 2 : 1.2; g2.strokeStyle = ring ? '#ffd23a' : '#fff'; g2.stroke(); };
     for (let k = 1; k < 5; k++) dot(racers[k], racers[k].colorHex, 3, false);
