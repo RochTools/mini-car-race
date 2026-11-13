@@ -1115,7 +1115,7 @@ function updateCamera(dt, t) {
   const sf = clamp(c.speed / PARAMS.vmax, 0, 1);
   let tf = 60, hard = false;
   if (state === 'menu') {      // showcase: fixed 3/4 view, the car turns on its platform
-    const R = clamp(8.6 / Math.max(camera.aspect, .01), 9, 20), a = .62;
+    const R = clamp(6.6 / Math.max(camera.aspect, .01), 6.5, 15), a = .62;
     tPos.set(c.x + Math.sin(c.h + a) * R, 1.6 + R * .13, c.z + Math.cos(c.h + a) * R); tLook.set(c.x, .75 - R * .09, c.z);
     const fx = tLook.x - tPos.x, fz = tLook.z - tPos.z, fl = Math.hypot(fx, fz) || 1; show.rx = -fz / fl; show.rz = fx / fl;
   } else if (orbit) {
@@ -1304,7 +1304,7 @@ function frame(now) {
   let raw = (now - last) / 1000; last = now; if (raw > .25) raw = .25; if (raw <= 0) return;
   // adaptive resolution: drop pixel ratio as soon as the game falls under ~50 fps, never raise past the level that failed.
   // Only frames that actually render count (the menu skips rendering, so its fast frames would hide a slow race).
-  if (raw < .1) { ftAcc += raw * 1000; ftN++; }
+  if (state !== 'menu' && raw < .1) { ftAcc += raw * 1000; ftN++; }
   if (now - lastAdapt > 1000) {
     lastAdapt = now;
     if (ftN >= 20 && ++warm > 1) {   // the first window after a (re)start holds shader-compile hitches, so it is ignored
@@ -1320,8 +1320,10 @@ function frame(now) {
     while (acc >= 1 / 60 && n < 5) { simStep(1 / 60); acc -= 1 / 60; n++; }
     if (n === 5) acc = 0;
   }
+  const wantPR = state === 'menu' ? Math.max(dpr, Math.min(window.devicePixelRatio || 1, 2)) : dpr;   // sharper picture for the showcase
+  if (wantPR !== renderer.getPixelRatio()) { renderer.setPixelRatio(wantPR); resize(); }
   const dtv = paused ? 0 : raw;
-  if (state === 'menu') { if (!show.drag) show.spin += raw * .5; show.slide *= Math.exp(-raw * 6.5); }
+  if (state === 'menu') { if (!show.drag) show.spin += raw * .22; show.slide *= Math.exp(-raw * 6.5); }
   for (let k = 0; k < 5; k++) applyVisuals(racers[k], vis[k], dtv || .0001);
   if (running) {
     for (let k = 0; k < 5; k++) {
