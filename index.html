@@ -724,6 +724,7 @@ const canvas = $('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isTouch && (window.devicePixelRatio || 1) < 1.5, powerPreference: 'high-performance' });
 let dprMax = Math.min(window.devicePixelRatio || 1, isTouch ? 1.5 : 1.75), dpr = isTouch ? Math.min(dprMax, 1.25) : dprMax, dprCeil = dprMax;
 renderer.setPixelRatio(dpr);
+const DPR_MIN = Math.min(1.1, dprMax);   // the adaptive resolution never drops below this, so cars stay sharp (was 0.75)
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 
@@ -3977,10 +3978,11 @@ function buildTrackVisuals(tr) {
   }
   mt.frustumCulled = false; scene.add(mt); freeze(mt);
 }
+const scenP = { x: 0, z: 0, lat: 0 };
 function updateScenery(dt, t) {
   if (SC.padTex) SC.padTex.offset.y -= dt * 1.4;
   if (SC.lavaTex) { SC.lavaTex.offset.y -= dt * .05; SC.lavaTex.offset.x += dt * .01; }
-  const p = { x: 0, z: 0, lat: 0 };
+  const p = scenP;
   for (const o of SC.boulders) {
     boulderPos(o.b, track, t, p); o.mesh.position.set(p.x, o.b.r * .95, p.z);
     o.mesh.rotation.x = t * 2.2 * (o.b.w > 0 ? 1 : -1); o.mesh.rotation.z = Math.cos(o.b.w * t + o.b.ph) * 1.5;
@@ -4336,7 +4338,7 @@ function respawnPlayer() { respawn(player, track, 0); }
 function showSheet(id) { for (const s of ['menu', 'pause', 'result']) $(s).hidden = s !== id; }
 function setHud(on) { $('hud').hidden = !on; $('touch').hidden = !(on && isTouch); }
 function setPaused(p) {
-  paused = p; $('pause').hidden = !p; if (p) { audioSilence(); for (const k in touchState) touchState[k] = false; }
+  paused = p; renderOnce = 2; $('pause').hidden = !p; if (p) { audioSilence(); for (const k in touchState) touchState[k] = false; }
   setText($('pauseBtnLabel'), p ? 'Resume' : 'Pause');
 }
 function toast(msg, ms) { const b = $('banner'); b.className = 'banner msg'; setText(b, msg); b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); clearTimeout(toast.t); toast.t = setTimeout(() => { if (b._t === msg) { b.className = 'banner'; setText(b, ''); } }, ms || 1800); }
@@ -4482,7 +4484,7 @@ function drawFx(t, on) {
   const w = fxc.w, h = fxc.h, cx = w / 2, cy = h * .47, R = Math.hypot(w, h) / 2, boost = player.boosting;
   if (inten >= .02) {
     g.lineWidth = 1.6; g.lineCap = 'round';
-    for (let i = 0; i < 44; i++) {
+    for (let i = 0; i < 30; i++) {
       const ang = i * 2.399963 + Math.floor(t * 3 + i) * .13, ph = (t * (1.1 + inten * .9) + i * .37) % 1, r1 = R * (.34 + .66 * ph * ph), r2 = r1 + R * (.04 + .3 * inten * ph);
       const ca = Math.cos(ang), sa = Math.sin(ang), al = inten * (.15 + .5 * ph) * .8;
       g.strokeStyle = boost ? 'rgba(130,210,255,' + al.toFixed(3) + ')' : 'rgba(255,255,255,' + al.toFixed(3) + ')';
@@ -4524,12 +4526,12 @@ function updateHud() {
   if (el.rpm._on !== on) { el.rpm._on = on; el.rpm.forEach((s, i) => s.classList.toggle('on', i < on)); el.rpm.forEach((s, i) => s.classList.toggle('hot', i >= 9)); }
   const ranked = rankCars(racers), place = ranked.indexOf(player) + 1;
   setText(el.posPill, 'Position ' + place + '/5'); el.posPill.classList.toggle('lead', place === 1);
-  const nit = Math.round(c.nitro), nOn = c.nitroOn || c.boosting;
-  el.nitroFill.style.width = nit + '%'; el.nitroFill.parentNode.classList.toggle('on', nOn);
-  el.nitroBtnFill.style.height = nit + '%'; el.tNitro.classList.toggle('boost', nOn);
+  const nit = Math.round(c.nitro), nOn = !!(c.nitroOn || c.boosting);   // only touch the DOM when a value actually changed
+  if (el._nit !== nit) { el._nit = nit; el.nitroFill.style.width = nit + '%'; el.nitroBtnFill.style.height = nit + '%'; }
+  if (el._nOn !== nOn) { el._nOn = nOn; el.nitroFill.parentNode.classList.toggle('on', nOn); el.tNitro.classList.toggle('boost', nOn); }
   const wrong = state === 'racing' && c.speed > 5 && (c.vx * track.tx[c.idx] + c.vz * track.tz[c.idx]) < -3;
-  el.wrong.hidden = !wrong;
-  if ((hudTick++ & 1) === 0) {
+  if (el._wr !== wrong) { el._wr = wrong; el.wrong.hidden = !wrong; }
+  if ((hudTick++ % 3) === 0) {   // minimap at 20 fps is plenty
     const g2 = el.mctx, m = miniMap; g2.clearRect(0, 0, el.mini.width, el.mini.height); g2.drawImage(miniBase, 0, 0);
     const dot = (cc, col, rad, ring) => { g2.beginPath(); g2.arc(m.ox + (cc.x - m.minX) * m.s, m.oz + (cc.z - m.minZ) * m.s, rad, 0, 6.2832); g2.fillStyle = col; g2.fill(); g2.lineWidth = ring ? 2 : 1.2; g2.strokeStyle = ring ? '#ffd23a' : '#fff'; g2.stroke(); };
     for (let k = 1; k < 5; k++) dot(racers[k], racers[k].colorHex, 3, false);
@@ -4580,6 +4582,8 @@ function initMenu() {
   for (const t of ['pointerup', 'pointercancel']) stg.addEventListener(t, e => { if (e.pointerId === dragId) { dragId = null; show.drag = false; } });
   document.querySelectorAll('.wxopt').forEach(b => b.addEventListener('click', () => setWeather(b.dataset.wx === 'storm')));
   if (isTouch) { $('autoGas').hidden = false; $('autoGas').addEventListener('click', () => { settings.autoGas = !settings.autoGas; store.set('autoGas', settings.autoGas); refreshMenu(); }); }
+  const early = () => { audioInit(); removeEventListener('pointerdown', early); removeEventListener('keydown', early); };
+  addEventListener('pointerdown', early); addEventListener('keydown', early);   // sound files load while you pick a car
   $('btnStart').addEventListener('click', startCountdown);
   $('btnAgain').addEventListener('click', startCountdown);
   $('btnMenu').addEventListener('click', goMenu);
@@ -4598,9 +4602,10 @@ function initMenu() {
 // ======================= main loop =======================
 function resize() {
   const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
-  document.documentElement.classList.toggle('portrait', h > w); resizeFx();
+  document.documentElement.classList.toggle('portrait', h > w); resizeFx(); renderOnce = 2;
 }
 addEventListener('resize', resize);
+let renderOnce = 2, menuFlip = false;   // paused: the picture is frozen, so only a couple of frames are drawn (after pausing / resizing)
 let last = performance.now(), acc = 0, ftAcc = 0, ftN = 0, lastAdapt = performance.now(), warm = 0;
 function frame(now) {
   requestAnimationFrame(frame);
@@ -4612,7 +4617,7 @@ function frame(now) {
     lastAdapt = now;
     if (ftN >= 20 && ++warm > 1) {   // the first window after a (re)start holds shader-compile hitches, so it is ignored
       const avg = ftAcc / ftN;
-      if (avg > 20.5 && dpr > .75) { dprCeil = Math.max(.75, dpr - .1); dpr = Math.max(.75, dpr - (avg > 28 ? .25 : .15)); renderer.setPixelRatio(dpr); resize(); warm = 0; }
+      if (avg > 20.5 && dpr > DPR_MIN) { dprCeil = Math.max(DPR_MIN, dpr - .1); dpr = Math.max(DPR_MIN, dpr - (avg > 28 ? .2 : .1)); renderer.setPixelRatio(dpr); resize(); warm = 0; }
       else if (avg < 17.6 && dpr < dprCeil) { dpr = Math.min(dprCeil, dpr + .1); renderer.setPixelRatio(dpr); resize(); }
     }
     ftAcc = 0; ftN = 0;
@@ -4644,12 +4649,14 @@ function frame(now) {
     updateHud(); audioUpdate(player, true);
   }
   if (audio.ctx && (now | 0) % 4 === 0) audioKeepAlive();
+  if (paused) { if (renderOnce <= 0) return; renderOnce--; }
   updateCamera(raw, now / 1000);
   const inMenu = state === 'menu';   // the menu is a live showcase: the rivals step out of the picture and the platform appears
   if (stage) { stage.visible = inMenu; if (inMenu) { stage.position.set(player.x, 0, player.z); stage.rotation.y = show.spin; } }
   for (let k = 1; k < 5; k++) vis[k].root.visible = !inMenu;
   const tags = !inMenu && !(state !== 'result' && (CAMS[settings.cam].id === 'hood' || CAMS[settings.cam].id === 'bumper'));
   for (let k = 0; k < 5; k++) { const v = vis[k], c = racers[k]; v.tag.visible = k === 0 ? tags : (Math.abs(c.x - camPos.x) + Math.abs(c.z - camPos.z) < 260); }
+  if (inMenu && (menuFlip = !menuFlip)) return;   // the showcase is drawn at 30 fps: half the battery, same look
   updateSmoke(dtv); updateScenery(dtv, simT); updateStorm(dtv); updateRain(dtv); drawFx(now / 1000, running);
   renderer.render(scene, camera);
 }
@@ -4679,7 +4686,7 @@ async function boot() {
   if (location.hash === '#debug') window.__td = { scene, camera, renderer, racers, track, HZ, get vis() { return vis; }, get state() { return state; }, setCar, startCountdown, setCamera, setWeather, simStep, settings, frameNow: frame, audio };
   showSheet('menu');
   bootUi.root.classList.add('done');
-  setTimeout(() => { bootUi.root.hidden = true; }, 500);
+  setTimeout(() => { bootUi.root.remove(); document.documentElement.style.setProperty('--logo', 'none'); }, 500);
   requestAnimationFrame(t => { last = t; frame(t); });
 }
 boot().catch(err => {
