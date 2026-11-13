@@ -1186,9 +1186,10 @@ function drawFx(t, on) {
 // ======================= HUD =======================
 const el = {};
 const miniBase = document.createElement('canvas');
-let miniMap = null, boardRows = [];
+let miniMap = null;
 function initHud() {
-  for (const id of ['spd', 'gear', 'timer', 'bestline', 'lapPill', 'posPill', 'wrong', 'nitroFill', 'board']) el[id] = $(id);
+  for (const id of ['spd', 'gear', 'posPill', 'wrong', 'nitroFill', 'nitroBtnFill', 'tNitro']) el[id] = $(id);
+  document.documentElement.classList.toggle('is-touch', isTouch);
   el.rpm = [...document.querySelectorAll('#rpm i')]; el.mini = $('mini'); el.mctx = el.mini.getContext('2d');
   const W = el.mini.width, H = el.mini.height, pad = 10, s = Math.min((W - pad * 2) / (TB.maxX - TB.minX), (H - pad * 2) / (TB.maxZ - TB.minZ));
   const ox = (W - (TB.maxX - TB.minX) * s) / 2, oz = (H - (TB.maxZ - TB.minZ) * s) / 2, minX = TB.minX, minZ = TB.minZ;
@@ -1202,11 +1203,6 @@ function initHud() {
   g.strokeStyle = '#ff6a1a'; g.lineWidth = 4.5;      // lava zones in orange
   for (const z of HZ.lava) { g.beginPath(); const n = (z.i1 - z.i0 + track.N) % track.N; for (let k = 0; k <= n; k += 2) { const p = P((z.i0 + k) % track.N); k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); } g.stroke(); }
   g.fillStyle = '#1d3524'; const p0 = P(0); g.fillRect(p0[0] - 1.5, p0[1] - 4, 3, 8);
-  el.board.textContent = ''; boardRows = [];
-  for (let i = 0; i < 5; i++) {
-    const li = document.createElement('li'), n = document.createElement('b'), d = document.createElement('i'), s2 = document.createElement('span');
-    li.append(n, d, s2); el.board.appendChild(li); boardRows.push({ li, n, d, s: s2 });
-  }
 }
 let hudTick = 0;
 function updateHud() {
@@ -1217,16 +1213,13 @@ function updateHud() {
   setText(el.gear, c.vf < -0.5 ? 'R' : String(g));
   if (el.rpm._on !== on) { el.rpm._on = on; el.rpm.forEach((s, i) => s.classList.toggle('on', i < on)); el.rpm.forEach((s, i) => s.classList.toggle('hot', i >= 9)); }
   const ranked = rankCars(racers), place = ranked.indexOf(player) + 1;
-  const pct = clamp(c.prog / track.N, 0, 1);
-  setText(el.lapPill, Math.round(pct * 100) + '% · ' + (pct * track.len / 1000).toFixed(1) + '/' + (track.len / 1000).toFixed(1) + ' km');
   setText(el.posPill, 'Position ' + place + '/5'); el.posPill.classList.toggle('lead', place === 1);
-  setText(el.timer, fmt(state === 'countdown' ? 0 : raceT));
-  setText(el.bestline, bestTime ? 'Best ' + fmt(bestTime) : 'Best —');
-  el.nitroFill.style.width = Math.round(c.nitro) + '%'; el.nitroFill.parentNode.classList.toggle('on', c.nitroOn || c.boosting);
+  const nit = Math.round(c.nitro), nOn = c.nitroOn || c.boosting;
+  el.nitroFill.style.width = nit + '%'; el.nitroFill.parentNode.classList.toggle('on', nOn);
+  el.nitroBtnFill.style.height = nit + '%'; el.tNitro.classList.toggle('boost', nOn);
   const wrong = state === 'racing' && c.speed > 5 && (c.vx * track.tx[c.idx] + c.vz * track.tz[c.idx]) < -3;
   el.wrong.hidden = !wrong;
   if ((hudTick++ & 1) === 0) {
-    for (let i = 0; i < 5; i++) { const rc = ranked[i], row = boardRows[i]; setText(row.n, String(i + 1)); setText(row.s, rc.name); row.d.style.background = rc.colorHex; row.li.classList.toggle('you', rc === player); }
     const g2 = el.mctx, m = miniMap; g2.clearRect(0, 0, el.mini.width, el.mini.height); g2.drawImage(miniBase, 0, 0);
     const dot = (cc, col, rad, ring) => { g2.beginPath(); g2.arc(m.ox + (cc.x - m.minX) * m.s, m.oz + (cc.z - m.minZ) * m.s, rad, 0, 6.2832); g2.fillStyle = col; g2.fill(); g2.lineWidth = ring ? 2 : 1.2; g2.strokeStyle = ring ? '#ffd23a' : '#fff'; g2.stroke(); };
     for (let k = 1; k < 5; k++) dot(racers[k], racers[k].colorHex, 3, false);
