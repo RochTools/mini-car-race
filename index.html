@@ -4218,9 +4218,15 @@ function audioInit() {
     loadSounds();
   } catch (e) { audio.ctx = null; }
 }
-function beep(freq, dur) {   // countdown 3-2-1 and GO: played from the mp3 (count.mp3, or go.mp3 if you add one); GO is the same mp3 a bit higher
-  if (!audio.ctx || !audio.on) return;
-  if (dur > .4) { if (!playBuf('go')) playBuf('count', 1, 1.3); } else playBuf('count');
+// count.mp3 is already the whole "3 - 2 - 1 - GO" sequence (about 3.9 s), so it is played ONCE when the countdown starts
+// (playing it again on every number made several copies overlap). A restart stops the previous copy first.
+function beep() { /* per-number beeps removed: see playCountdown() */ }
+function stopCountdown() { try { if (audio.countSrc) audio.countSrc.stop(); } catch (e) { /* already finished */ } audio.countSrc = null; }
+function playCountdown() {
+  stopCountdown();
+  const b = audio.buf.count; if (!b || !audio.ctx || !audio.on) return;
+  const src = audio.ctx.createBufferSource(), g = audio.ctx.createGain();
+  src.buffer = b; g.gain.value = SOUND_VOL.count; src.connect(g); g.connect(audio.master); src.start(); audio.countSrc = src;
 }
 function bump(strong) {
   return;   // impact sounds removed (kept sound: engine, countdown, soft music, nitro, tyre screech)
@@ -4424,13 +4430,13 @@ let wake = null;
 async function wakeOn() { try { if ('wakeLock' in navigator && !wake && !document.hidden) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) { wake = null; } }
 function wakeOff() { try { if (wake) wake.release(); } catch (e) { /* ignore */ } wake = null; }
 function startCountdown() {
-  lockLandscape(); wakeOn(); audioInit(); setSound(settings.sound); resetRace();
+  lockLandscape(); wakeOn(); audioInit(); setSound(settings.sound); resetRace(); playCountdown();
   state = 'countdown'; countT = 0; lastCount = 4; camTransit = 1.3; paused = false;
   showSheet(''); setHud(true); document.activeElement && document.activeElement.blur && document.activeElement.blur();
   toast('Camera: ' + CAMS[settings.cam].name + '  (C to change)', 2600);
 }
 function goMenu() {
-  wakeOff(); state = 'menu'; paused = false; resetRace(); camTransit = 1.6; setHud(false); showSheet('menu'); refreshMenu(); audioSilence();
+  wakeOff(); stopCountdown(); state = 'menu'; paused = false; resetRace(); camTransit = 1.6; setHud(false); showSheet('menu'); refreshMenu(); audioSilence();
 }
 function finishRace() {
   state = 'finished'; camTransit = 1.6;
