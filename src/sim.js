@@ -72,8 +72,7 @@ export function buildHazards(tr) {
   const lava = (f0, f1) => { H.lava.push({ i0: at(f0), i1: at(f1) }); H.gates.push({ idx: at(f0) }); };
   // nitro / boost pads (the ones inside lava zones are a risk-reward gamble)
   [[0.035, 0], [0.095, -5], [0.135, 5], [0.255, -6], [0.50, 0], [0.745, -4], [0.93, 0]].forEach(a => pad(a[0], a[1]));
-  // oil slicks: the car slides with almost no grip
-  [[0.07, -6, 5], [0.115, 4, 5], [0.19, -3, 4.5], [0.33, 2, 5], [0.465, -5, 4.5], [0.525, 3, 5], [0.685, -2, 4.5], [0.76, 5, 5], [0.945, -4, 5]].forEach(a => oil(a[0], a[1], a[2]));
+  // (oil slicks removed: the track is clear. To bring them back, re-add oil(fraction, lateral, radius) calls here.)
   // rocks: a slalom, plus single blockers
   // (rocks removed)
   // boulders that swing across the track

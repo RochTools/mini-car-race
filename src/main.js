@@ -49,11 +49,13 @@ const settings = {
 
 // ======================= renderer / scene =======================
 const canvas = $('gl');
+// weak phones (<= 4 GB RAM or <= 4 cores, e.g. Helio G36 class) start on lighter settings: fewer trees, lower starting resolution
+const LOW_END = isTouch && ((navigator.deviceMemory || 8) <= 4 || (navigator.hardwareConcurrency || 8) <= 4);
 // MSAA is wasted on dense screens (the pixel ratio already hides the jaggies) and costs a lot of fill rate
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isTouch && (window.devicePixelRatio || 1) < 1.5, powerPreference: 'high-performance' });
-let dprMax = Math.min(window.devicePixelRatio || 1, isTouch ? 1.5 : 1.75), dpr = isTouch ? Math.min(dprMax, 1.25) : dprMax, dprCeil = dprMax;
+let dprMax = Math.min(window.devicePixelRatio || 1, isTouch ? 1.5 : 1.75), dpr = isTouch ? Math.min(dprMax, LOW_END ? 1 : 1.25) : dprMax, dprCeil = dprMax;
 renderer.setPixelRatio(dpr);
-const DPR_MIN = Math.min(1.1, dprMax);   // the adaptive resolution never drops below this, so cars stay sharp (was 0.75)
+const DPR_MIN = Math.min(LOW_END ? .9 : 1.1, dprMax);   // the adaptive resolution never drops below this, so cars stay sharp (was 0.75)
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 
@@ -419,10 +421,43 @@ function makeTag(text, color, you) {
   sp.scale.set(you ? 3.6 : 4.4, you ? 1.35 : 1.65, 1); sp.renderOrder = 30; return sp;
 }
 
+// ---- car LOD (level of detail): far cars use a simplified copy of the body. Vertex clustering: every vertex is snapped to a small grid,
+//      vertices that land in the same cell merge, triangles that collapse are dropped. The 3 studio cars have ~100k triangles each. ----
+const LOD_DIST = 20, LOD_CELL = .1;
+function simplifyGeo(src, cell) {
+  const g = src.index ? src.toNonIndexed() : src, P = g.attributes.position, Nn = g.attributes.normal, n = P.count, map = new Map(), id = new Int32Array(n);
+  const px = [], py = [], pz = [], nx = [], ny = [], nz = [], cnt = [];
+  for (let i = 0; i < n; i++) {
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i), key = Math.round(x / cell) + ',' + Math.round(y / cell) + ',' + Math.round(z / cell);
+    let j = map.get(key); if (j === undefined) { j = px.length; map.set(key, j); px.push(0); py.push(0); pz.push(0); nx.push(0); ny.push(0); nz.push(0); cnt.push(0); }
+    px[j] += x; py[j] += y; pz[j] += z; if (Nn) { nx[j] += Nn.getX(i); ny[j] += Nn.getY(i); nz[j] += Nn.getZ(i); } cnt[j]++; id[i] = j;
+  }
+  const m = px.length, pos = new Float32Array(m * 3), nor = new Float32Array(m * 3);
+  for (let j = 0; j < m; j++) {
+    pos[j * 3] = px[j] / cnt[j]; pos[j * 3 + 1] = py[j] / cnt[j]; pos[j * 3 + 2] = pz[j] / cnt[j];
+    const l = Math.hypot(nx[j], ny[j], nz[j]) || 1; nor[j * 3] = nx[j] / l; nor[j * 3 + 1] = ny[j] / l; nor[j * 3 + 2] = nz[j] / l;
+  }
+  const idx = [];
+  for (let i = 0; i < n; i += 3) { const a = id[i], b = id[i + 1], c = id[i + 2]; if (a !== b && b !== c && a !== c) idx.push(a, b, c); }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3)); out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setIndex(idx); out.computeBoundingSphere(); return out;
+}
+function lowShellFor(M) {   // built once per car model, shared by every copy; null for the small cars that do not need it
+  if (M.lowShell !== undefined) return M.lowShell;
+  const hi = M.template.children[0]; let tris = 0;
+  hi.traverse(o => { if (o.isMesh) tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; });
+  if (tris < 30000) return (M.lowShell = null);
+  const lo = new THREE.Group();
+  hi.children.forEach(o => { if (!o.isMesh) return; const m = new THREE.Mesh(simplifyGeo(o.geometry, LOD_CELL), o.material); m.userData.mk = o.userData.mk; lo.add(m); });
+  lo.visible = false; return (M.lowShell = lo);
+}
+
 function spawnCar(id, colorHex, name, you) {
   const M = MODELS[id];
   const root = new THREE.Group(), tilt = new THREE.Group(); root.add(tilt);
   const model = M.template.clone(true); tilt.add(model);       // geometry + shared materials are reused, nothing is rebuilt
+  const shellHi = model.children[0], lowT = lowShellFor(M), shellLo = lowT ? lowT.clone(true) : null; if (shellLo) { shellLo.visible = false; model.add(shellLo); }
   const pm = {}; for (const k of M.paintKeys) pm[k] = M.mats[k].clone();
   const tail = M.mats.tail.clone();
   model.traverse(o => { if (o.isMesh) { const k = o.userData.mk; if (pm[k]) o.material = pm[k]; else if (k === 'tail') o.material = tail; } });
@@ -433,7 +468,7 @@ function spawnCar(id, colorHex, name, you) {
   const shadow = new THREE.Mesh(CAR.shadowGeo, CAR.shadowMat); shadow.position.y = .1; shadow.renderOrder = 2; root.add(shadow);
   const tag = makeTag(name, colorHex, you); tag.position.set(0, M.tagY, 0); root.add(tag);
   scene.add(root);
-  const v = { id, root, tilt, pm, tail, tailBase: M.tailBase, tailBrake: M.tailBrake, wr: M.wr, wheels, wheelAngle: 0, pitch: 0, roll: 0, prevVf: 0, accel: 0, shadow, tag, you, M };
+  const v = { id, root, tilt, pm, tail, tailBase: M.tailBase, tailBrake: M.tailBrake, wr: M.wr, wheels, wheelAngle: 0, pitch: 0, roll: 0, prevVf: 0, accel: 0, shadow, tag, you, M, shellHi, shellLo, lodFar: false };
   setCarColor(v, colorHex);
   return v;
 }
@@ -525,7 +560,7 @@ const TB = (() => {
   for (let i = 0; i < track.N; i++) { a = Math.min(a, track.x[i]); b = Math.max(b, track.x[i]); c = Math.min(c, track.z[i]); d = Math.max(d, track.z[i]); }
   return { minX: a, maxX: b, minZ: c, maxZ: d, cx: (a + b) / 2, cz: (c + d) / 2, r: Math.hypot(b - a, d - c) / 2 };
 })();
-const SC = { padTex: null, lavaTex: null, boulders: [] };   // animated scenery
+const SC = { padTex: null, lavaTex: null, boulders: [], treeCells: [] };   // animated scenery + tree cells (distance culling)
 
 function canvasTex(w, h, draw, repeat) {
   const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
@@ -650,17 +685,28 @@ function buildTrackVisuals(tr) {
   const crown = new THREE.ConeGeometry(2.1, 6.2, 6); crown.translate(0, 5, 0);
   const paintGeo = (geo, hex) => { const n = geo.toNonIndexed(); const cl = new THREE.Color(hex), a = []; for (let i = 0; i < n.attributes.position.count; i++) a.push(cl.r, cl.g, cl.b); n.setAttribute('color', new THREE.Float32BufferAttribute(a, 3)); n.deleteAttribute('uv'); return n; };
   const treeGeo = mergeGeometries([paintGeo(trunk, '#6b4a2e'), paintGeo(crown, '#3f7a45')], false);
-  const TREES = isTouch ? 900 : 1500, trees = new THREE.InstancedMesh(treeGeo, new THREE.MeshLambertMaterial({ vertexColors: true }), TREES);
+  const TREES = LOW_END ? 500 : isTouch ? 900 : 1500, treeMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   const dummy = new THREE.Object3D(), tc = new THREE.Color(); let placed = 0, tries = 0;
+  const treeData = [];   // [x, z, matrix, r, g, b]; sorted into map cells below so the renderer can skip the ones that are behind you or far away
   const W = TB.maxX - TB.minX + 1500, Hh = TB.maxZ - TB.minZ + 1500;
   while (placed < TREES && tries++ < 12000) {
     const x = TB.cx + (rnd() - .5) * W, z = TB.cz + (rnd() - .5) * Hh;
     let d = 1e9; for (let i = 0; i < N; i += 3) { const dd = (x - tr.x[i]) ** 2 + (z - tr.z[i]) ** 2; if (dd < d) d = dd; }
     if (d < (hw + 20) ** 2) continue;
     dummy.position.set(x, -.1, z); const s = .8 + rnd() * 1.1; dummy.scale.set(s, s * (.9 + rnd() * .5), s); dummy.rotation.set(0, rnd() * 6, 0); dummy.updateMatrix();
-    trees.setMatrixAt(placed, dummy.matrix); tc.setRGB(.78 + rnd() * .22, .86 + rnd() * .14, .78 + rnd() * .22); trees.setColorAt(placed, tc); placed++;
+    treeData.push([x, z, dummy.matrix.clone(), .78 + rnd() * .22, .86 + rnd() * .14, .78 + rnd() * .22]); placed++;
   }
-  trees.count = placed; trees.instanceMatrix.needsUpdate = true; if (trees.instanceColor) trees.instanceColor.needsUpdate = true; trees.frustumCulled = false; scene.add(trees); freeze(trees);
+  // culling: one small InstancedMesh per 800 m cell (same trees, same positions as before). Three.js skips every cell outside the camera view,
+  // and updateScenery() also hides cells beyond the fog distance, so in the storm (fog 900 m) most of the forest costs nothing.
+  { const CELL = 800, cells = new Map();
+    for (const t of treeData) { const key = Math.floor(t[0] / CELL) + ',' + Math.floor(t[1] / CELL); let a = cells.get(key); if (!a) cells.set(key, a = []); a.push(t); }
+    for (const list of cells.values()) {
+      const im = new THREE.InstancedMesh(treeGeo, treeMat, list.length);
+      list.forEach((t, i) => { im.setMatrixAt(i, t[2]); tc.setRGB(t[3], t[4], t[5]); im.setColorAt(i, tc); });
+      im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      im.computeBoundingSphere(); scene.add(im); freeze(im);   // frustumCulled stays on (default)
+      SC.treeCells.push({ mesh: im, x: im.boundingSphere.center.x, z: im.boundingSphere.center.z, r: im.boundingSphere.radius });
+    } }
   const MN = 34, mt = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 5), new THREE.MeshLambertMaterial({ color: '#8aa3a0' }), MN);
   for (let i = 0; i < MN; i++) {
     const a = i / MN * Math.PI * 2 + rnd() * .2, r = TB.r + 1150 + rnd() * 200, h = 160 + rnd() * 230, w = 230 + rnd() * 200;
@@ -673,6 +719,9 @@ function updateScenery(dt, t) {
   if (SC.padTex) SC.padTex.offset.y -= dt * 1.4;
   if (SC.lavaTex) { SC.lavaTex.offset.y -= dt * .05; SC.lavaTex.offset.x += dt * .01; }
   const p = scenP;
+  // distance culling: a tree cell farther than the fog distance (or the low-end draw limit) is not drawn at all
+  const drawFar = Math.min(scene.fog.far, LOW_END ? 1400 : 1e9), cx = camera.position.x, cz = camera.position.z;
+  for (const tc of SC.treeCells) tc.mesh.visible = Math.hypot(tc.x - cx, tc.z - cz) - tc.r < drawFar;
   for (const o of SC.boulders) {
     boulderPos(o.b, track, t, p); o.mesh.position.set(p.x, o.b.r * .95, p.z);
     o.mesh.rotation.x = t * 2.2 * (o.b.w > 0 ? 1 : -1); o.mesh.rotation.z = Math.cos(o.b.w * t + o.b.ph) * 1.5;
@@ -815,24 +864,21 @@ function audioInit() {
     const master = ctx.createGain(); master.gain.value = audio.on ? .8 : 0; master.connect(ctx.destination); audio.master = master;
     const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(); o1.type = 'sawtooth'; o2.type = 'square';
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500;
-    const eg = ctx.createGain(); eg.gain.value = 0; o1.connect(lp); o2.connect(lp); lp.connect(eg); eg.connect(master); o1.start(); o2.start();
+    const eg = ctx.createGain(); eg.gain.value = 0; o1.connect(lp); o2.connect(lp); lp.connect(eg); eg.connect(master);   // (synthesised engine oscillators are never started: only the mp3 sounds play)
     const buf = ctx.createBuffer(1, ctx.sampleRate * 1.5, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     audio.noise = buf;
     const ns = ctx.createBufferSource(); ns.buffer = buf; ns.loop = true;
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1700; bp.Q.value = 1.1; const sq = ctx.createGain(); sq.gain.value = 0;
     const lp2 = ctx.createBiquadFilter(); lp2.type = 'lowpass'; lp2.frequency.value = 480; const gr = ctx.createGain(); gr.gain.value = 0;
     const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 900; const wd = ctx.createGain(); wd.gain.value = 0;   // wind / rain rush
-    ns.connect(bp); bp.connect(sq); sq.connect(master); ns.connect(lp2); lp2.connect(gr); gr.connect(master); ns.connect(hp); hp.connect(wd); wd.connect(master); ns.start();
+    ns.connect(bp); bp.connect(sq); sq.connect(master); ns.connect(lp2); lp2.connect(gr); gr.connect(master); ns.connect(hp); hp.connect(wd); wd.connect(master);   // (synth skid / wind noise is never started)
     Object.assign(audio, { o1, o2, lp, eg, sq, gr, wd });
     loadSounds();
   } catch (e) { audio.ctx = null; }
 }
-function beep(freq, dur) {
+function beep(freq, dur) {   // countdown 3-2-1 and GO: played from the mp3 (count.mp3, or go.mp3 if you add one); GO is the same mp3 a bit higher
   if (!audio.ctx || !audio.on) return;
-  if (dur > .4 && playBuf('go')) return; if (dur <= .4 && playBuf('count')) return;
-  const ctx = audio.ctx, o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime;
-  o.type = 'sine'; o.frequency.value = freq; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.35, t + .02); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
-  o.connect(g); g.connect(audio.master); o.start(t); o.stop(t + dur + .05);
+  if (dur > .4) { if (!playBuf('go')) playBuf('count', 1, 1.3); } else playBuf('count');
 }
 function bump(strong) {
   return;   // impact sounds removed (kept sound: engine, countdown, soft music, nitro, tyre screech)
@@ -844,11 +890,7 @@ function bump(strong) {
 }
 function whoosh() {
   if (!audio.ctx || !audio.on) return;
-  if (playBuf('nitro')) return;
-  const ctx = audio.ctx, o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime;
-  o.type = 'sawtooth'; o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(1100, t + .4);
-  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.16, t + .08); g.gain.exponentialRampToValueAtTime(.0001, t + .5);
-  o.connect(g); g.connect(audio.master); o.start(t); o.stop(t + .55);
+  playBuf('nitro');   // mp3 only
 }
 function thunder(delay) {
   return;   // removed
@@ -972,6 +1014,10 @@ function applyVisuals(c, v, dt) {
   if (showing) { v.root.position.set(c.x + show.rx * show.slide, -sink + show.y, c.z + show.rz * show.slide); v.root.rotation.y = c.h + show.spin; }
   else { v.root.position.set(c.x, -sink, c.z); v.root.rotation.y = c.h; }
   v.shadow.visible = sink === 0;
+  if (v.shellLo) {   // LOD: simplified body when the car is far from the camera (never in the menu showcase)
+    const far = state !== 'menu' && Math.hypot(c.x - camPos.x, c.z - camPos.z) > LOD_DIST;
+    if (far !== v.lodFar) { v.lodFar = far; v.shellHi.visible = !far; v.shellLo.visible = far; }
+  }
   v.tilt.visible = !(c.ghostT > 0) || (((performance.now() / 90) | 0) & 1) === 0;
   const acc = dt > 0 ? (c.vf - v.prevVf) / dt : 0; v.prevVf = c.vf; v.accel += (clamp(acc, -40, 25) - v.accel) * Math.min(1, dt * 6);
   const k = Math.min(1, dt * 8);
@@ -1036,7 +1082,7 @@ let wake = null;
 async function wakeOn() { try { if ('wakeLock' in navigator && !wake && !document.hidden) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) { wake = null; } }
 function wakeOff() { try { if (wake) wake.release(); } catch (e) { /* ignore */ } wake = null; }
 function startCountdown() {
-  wakeOn(); audioInit(); setSound(settings.sound); resetRace();
+  lockLandscape(); wakeOn(); audioInit(); setSound(settings.sound); resetRace();
   state = 'countdown'; countT = 0; lastCount = 4; camTransit = 1.3; paused = false;
   showSheet(''); setHud(true); document.activeElement && document.activeElement.blur && document.activeElement.blur();
   toast('Camera: ' + CAMS[settings.cam].name + '  (C to change)', 2600);
@@ -1127,8 +1173,8 @@ function updateCamera(dt, t) {
     camH += angDiff(c.h, camH) * (1 - Math.exp(-dt * (fast ? 22 : 6)));
     const fx = Math.sin(camH), fz = Math.cos(camH), cam = MODEL_BY[settings.car].cam;
     if (mode === 'chase') {
-      const dist = 8.0 + sf * 2.2 + fovBoost * 1.2;
-      tPos.set(c.x - fx * dist, 3.0 + sf * .5, c.z - fz * dist); tLook.set(c.x + fx * 6 - fz * c.steer * 1.2, 1.3, c.z + fz * 6 + fx * c.steer * 1.2); tf = 60 + sf * 18;
+      const dist = 6.2 + sf * 2.0 + fovBoost * 1.0;   // closer to the car than before (was 8.0 / 3.0)
+      tPos.set(c.x - fx * dist, 2.4 + sf * .5, c.z - fz * dist); tLook.set(c.x + fx * 6 - fz * c.steer * 1.2, 1.3, c.z + fz * 6 + fx * c.steer * 1.2); tf = 60 + sf * 18;
     } else if (mode === 'high') {
       const dist = 15 + sf * 4.5; tPos.set(c.x - fx * dist, 8 + sf * 3, c.z - fz * dist); tLook.set(c.x + fx * 12, 1.0, c.z + fz * 12); tf = 58 + sf * 18;
     } else if (mode === 'hood') {
@@ -1165,7 +1211,7 @@ function updateCamera(dt, t) {
 // ======================= speed lines / lightning overlay =======================
 const fxc = { cv: null, g: null, w: 0, h: 0, clear: true };
 function initFx() { fxc.cv = $('fx'); fxc.g = fxc.cv.getContext('2d'); resizeFx(); }
-function resizeFx() { if (!fxc.cv) return; fxc.w = fxc.cv.width = Math.max(2, Math.ceil(innerWidth / 2)); fxc.h = fxc.cv.height = Math.max(2, Math.ceil(innerHeight / 2)); fxc.clear = true; }
+function resizeFx() { if (!fxc.cv) return; const vs = vpSize(); fxc.w = fxc.cv.width = Math.max(2, Math.ceil(vs[0] / 2)); fxc.h = fxc.cv.height = Math.max(2, Math.ceil(vs[1] / 2)); fxc.clear = true; }
 function drawFx(t, on) {
   const g = fxc.g; if (!g) return;
   const sf = clamp(player.speed / PARAMS.vmax, 0, 1.3), inten = on ? clamp((sf - .6) / .4, 0, 1) * .8 + fovBoost * .55 : 0, fl = on ? storm.flash : 0;
@@ -1267,8 +1313,8 @@ function initMenu() {
   $('carPrev').addEventListener('click', () => cycleCar(-1));
   $('carNext').addEventListener('click', () => cycleCar(1));
   const stg = $('menuStage'); let dragX = 0, dragId = null;      // drag the showcase to turn the car by hand
-  stg.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; dragId = e.pointerId; dragX = e.clientX; show.drag = true; try { stg.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ } });
-  stg.addEventListener('pointermove', e => { if (e.pointerId !== dragId) return; show.spin += (e.clientX - dragX) * .012; dragX = e.clientX; });
+  stg.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; dragId = e.pointerId; dragX = rot.on ? e.clientY : e.clientX; show.drag = true; try { stg.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ } });
+  stg.addEventListener('pointermove', e => { if (e.pointerId !== dragId) return; show.spin += ((rot.on ? e.clientY : e.clientX) - dragX) * .012; dragX = rot.on ? e.clientY : e.clientX; });
   for (const t of ['pointerup', 'pointercancel']) stg.addEventListener(t, e => { if (e.pointerId === dragId) { dragId = null; show.drag = false; } });
   document.querySelectorAll('.wxopt').forEach(b => b.addEventListener('click', () => setWeather(b.dataset.wx === 'storm')));
   if (isTouch) { $('autoGas').hidden = false; $('autoGas').addEventListener('click', () => { settings.autoGas = !settings.autoGas; store.set('autoGas', settings.autoGas); refreshMenu(); }); }
@@ -1290,11 +1336,27 @@ function initMenu() {
 }
 
 // ======================= main loop =======================
+// ---- always landscape: lock the orientation on the first tap (Android Chrome / installed app); where that is refused (iPhone, some browsers)
+//      and the phone is upright, the whole page is rotated 90 degrees with CSS instead ----
+const rot = { on: document.documentElement.classList.contains('rot90') };
+function vpSize() { return rot.on ? [innerHeight, innerWidth] : [innerWidth, innerHeight]; }
+function applyRot() {
+  const on = isTouch && innerHeight > innerWidth * 1.05;
+  const st = document.documentElement.style; st.setProperty('--rw', innerWidth + 'px'); st.setProperty('--rh', innerHeight + 'px');
+  if (on !== rot.on) { rot.on = on; document.documentElement.classList.toggle('rot90', on); resize(); }
+}
+async function lockLandscape() {
+  if (!isTouch) return;
+  try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch (e) { /* not allowed: fine */ }
+  try { await screen.orientation.lock('landscape'); } catch (e) { /* not supported: the CSS rotation covers it */ }
+  setTimeout(applyRot, 250);
+}
 function resize() {
-  const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  const [w, h] = vpSize(); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
   document.documentElement.classList.toggle('portrait', h > w); resizeFx(); renderOnce = 2;
 }
-addEventListener('resize', resize);
+addEventListener('resize', () => { applyRot(); resize(); });
+addEventListener('orientationchange', () => setTimeout(() => { applyRot(); resize(); }, 150));
 let renderOnce = 2, menuFlip = false;   // paused: the picture is frozen, so only a couple of frames are drawn (after pausing / resizing)
 let last = performance.now(), acc = 0, ftAcc = 0, ftN = 0, lastAdapt = performance.now(), warm = 0;
 function frame(now) {
@@ -1343,7 +1405,8 @@ function frame(now) {
   updateCamera(raw, now / 1000);
   const inMenu = state === 'menu';   // the menu is a live showcase: the rivals step out of the picture and the platform appears
   if (stage) { stage.visible = inMenu; if (inMenu) { stage.position.set(player.x, 0, player.z); stage.rotation.y = show.spin; } }
-  for (let k = 1; k < 5; k++) vis[k].root.visible = !inMenu;
+  const carFar = scene.fog.far + 80;   // a rival farther away than the fog is not drawn (it would be a fog-coloured speck)
+  for (let k = 1; k < 5; k++) vis[k].root.visible = !inMenu && Math.hypot(racers[k].x - camPos.x, racers[k].z - camPos.z) < carFar;
   const tags = !inMenu && !(state !== 'result' && (CAMS[settings.cam].id === 'hood' || CAMS[settings.cam].id === 'bumper'));
   for (let k = 0; k < 5; k++) { const v = vis[k], c = racers[k]; v.tag.visible = k === 0 ? tags : (Math.abs(c.x - camPos.x) + Math.abs(c.z - camPos.z) < 260); }
   if (inMenu && (menuFlip = !menuFlip)) return;   // the showcase is drawn at 30 fps: half the battery, same look
@@ -1366,7 +1429,7 @@ async function boot() {
   await bootStep(74, 'Laying the track and hazards…');
   buildTrackVisuals(track); buildStage(); initSmoke(); initRain(); initFx();
   await bootStep(86, 'Painting and fuelling up…');
-  initMenu(); initHud(); resize(); applyWeather();
+  initMenu(); initHud(); applyRot(); resize(); applyWeather();
   buildGrid(); camPos.set(player.x + 8, 3, player.z - 8); camLook.set(player.x, .9, player.z);
   setPlayerColor(settings.color); setSound(settings.sound); refreshMenu(); setCamera(settings.cam); toast.t = 0; $('banner').className = 'banner'; setText($('banner'), '');
   await bootStep(94, 'Warming up the engines…');
