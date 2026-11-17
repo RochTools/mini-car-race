@@ -3,7 +3,7 @@
    - Three.js and the fonts (cdn.jsdelivr.net, Google Fonts) are cached the first time they load,
      so after one online visit the game starts and runs fully offline.
    Bump VERSION whenever you change index.html or the icons, so players get the update. */
-const VERSION = 'mini-car-race-v34-cam';
+const VERSION = 'mini-car-race-v35-cam';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png', './icons/favicon-48.png', './assets/bugatti_divo.glb', './assets/bugatti_chiron.glb', './assets/lamborghini_essenza.glb', './assets/red_sports_car.glb'];   // the track GLBs are NOT precached: only the circuit you pick is downloaded (then cached on first use)
 const CDN = [
   'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js',
