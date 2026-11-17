@@ -3,7 +3,9 @@ export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const lerp = (a, b, t) => a + (b - a) * t;
 const wrapIdx = (d, N) => { d %= N; if (d > N / 2) d -= N; else if (d < -N / 2) d += N; return d; };
 
-export const PARAMS = { vmax: 78, acc: 15, brake: 34, rev: 8, revMax: 12 };
+// vmax: 78 -> 70 m/s (252 km/h): a little less top end, but the car now gets there quicker (acc 15 -> 17)
+// and the brakes bite harder (34 -> 36), so the whole car feels livelier instead of just faster.
+export const PARAMS = { vmax: 70, acc: 17, brake: 36, rev: 8, revMax: 12 };
 export const TRACK_WIDTH = 22;
 
 // A big 5.6 km circuit (metres): long main straight, fast sweeper, hairpin, S-bends, a U-turn and a tight chicane.
@@ -14,8 +16,9 @@ const CTRL = [
   [-330,-190],[-190,-60]
 ];
 
-export function buildTrack(scale = 1) {
-  const P = CTRL.map(p => [p[0] * scale, p[1] * scale]);
+export function buildTrack(scale = 1, custom = null) {
+  // custom = { x:[], z:[], y:[], width }: a ready-made closed centre line (metres) with road heights; otherwise the built-in spline circuit
+  const P = custom ? [] : CTRL.map(p => [p[0] * scale, p[1] * scale]);
   const n = P.length, dense = [];
   for (let i = 0; i < n; i++) {
     const p0 = P[(i + n - 1) % n], p1 = P[i], p2 = P[(i + 1) % n], p3 = P[(i + 2) % n];
@@ -27,19 +30,22 @@ export function buildTrack(scale = 1) {
       ]);
     }
   }
+  if (custom) for (let i = 0; i < custom.x.length; i++) dense.push([custom.x[i], custom.z[i], custom.y ? custom.y[i] : 0, custom.w ? custom.w[i] : 0]);
   const M = dense.length, cum = new Float64Array(M + 1);
   for (let i = 0; i < M; i++) {
     const a = dense[i], b = dense[(i + 1) % M];
     cum[i + 1] = cum[i] + Math.hypot(b[0] - a[0], b[1] - a[1]);
   }
   const len = cum[M], N = Math.round(len / 4), ds = len / N;
-  const x = new Float32Array(N), z = new Float32Array(N);
+  const x = new Float32Array(N), z = new Float32Array(N), yv = new Float32Array(N), wv = new Float32Array(N);
+  const W0 = custom && custom.width ? custom.width : TRACK_WIDTH;
   let j = 0;
   for (let i = 0; i < N; i++) {
     const s = i * ds;
     while (cum[j + 1] < s) j++;
     const a = dense[j], b = dense[(j + 1) % M], f = (s - cum[j]) / (cum[j + 1] - cum[j]);
-    x[i] = a[0] + (b[0] - a[0]) * f; z[i] = a[1] + (b[1] - a[1]) * f;
+    x[i] = a[0] + (b[0] - a[0]) * f; z[i] = a[1] + (b[1] - a[1]) * f; yv[i] = (a[2] || 0) + ((b[2] || 0) - (a[2] || 0)) * f;
+    wv[i] = (a[3] ? a[3] + ((b[3] || a[3]) - a[3]) * f : W0) / 2;   // half pavement width at this point (constant unless the track data carries a width per point)
   }
   const tx = new Float32Array(N), tz = new Float32Array(N), nx = new Float32Array(N), nz = new Float32Array(N), heading = new Float32Array(N), kappa = new Float32Array(N);
   for (let i = 0; i < N; i++) {
@@ -55,7 +61,7 @@ export function buildTrack(scale = 1) {
   }
   const ks = new Float32Array(N);
   for (let i = 0; i < N; i++) { let m = 0; for (let k = -3; k <= 3; k++) m += kappa[(i + k + N) % N]; ks[i] = m / 7; }
-  return { N, len, ds, x, z, tx, tz, nx, nz, heading, kappa: ks, width: TRACK_WIDTH };
+  return { N, len, ds, x, z, y: yv, tx, tz, nx, nz, heading, kappa: ks, width: W0, hw: wv };
 }
 
 // ---------- hazards: boost pads, oil slicks, rocks, swinging boulders and lava zones ----------
@@ -65,13 +71,27 @@ export function buildHazards(tr) {
   const N = tr.N, hw = tr.width / 2, at = f => Math.round(f * N) % N;
   const world = (idx, lat) => ({ idx, lat, x: tr.x[idx] + tr.nx[idx] * lat, z: tr.z[idx] + tr.nz[idx] * lat, h: tr.heading[idx] });
   const H = { pads: [], oil: [], rocks: [], boulders: [], lava: [], gates: [] };
-  const pad = (f, lat) => H.pads.push(world(at(f), lat));
   const oil = (f, lat, r) => H.oil.push(Object.assign(world(at(f), lat), { r: r || 5 }));
   const rock = (f, lat, r) => H.rocks.push(Object.assign(world(at(f), lat), { r: r || 1.8 }));
   const boulder = (f, ph, period) => H.boulders.push({ idx: at(f), amp: hw - 3.4, w: 2 * Math.PI / period, ph, r: 2.6 });
   const lava = (f0, f1) => { H.lava.push({ i0: at(f0), i1: at(f1) }); H.gates.push({ idx: at(f0) }); };
-  // nitro / boost pads (the ones inside lava zones are a risk-reward gamble)
-  [[0.035, 0], [0.095, -5], [0.135, 5], [0.255, -6], [0.50, 0], [0.745, -4], [0.93, 0]].forEach(a => pad(a[0], a[1]));
+  // Nitro pads only go on a calm piece of road: from a little before the pad to a good way past it there must be no bend to cut or brake for,
+  // so the boost is easy to hold. The straightest stretches of the whole lap are picked (best first, kept apart), up to 7 pads;
+  // a twisty circuit simply gets fewer pads rather than pads sitting in corners.
+  const BACK = Math.round(14 / tr.ds), AHEAD = Math.round(75 / tr.ds), GAP = Math.round(100 / tr.ds);
+  const bendAround = i => { let m = 0; for (let k = -BACK; k <= AHEAD; k++) m = Math.max(m, tr.kappa[((i + k) % N + N) % N]); return m; };
+  const cand = []; for (let i = 0; i < N; i++) cand.push({ i, k: bendAround(i) });
+  cand.sort((p, q) => p.k - q.k);
+  const picked = [];
+  for (const c of cand) {
+    if (picked.length >= 7) break;
+    if (c.k > 1 / 110 && picked.length >= 3) break;            // nothing straight enough left (a bend tighter than ~110 m radius somewhere ahead)
+    if (picked.some(q => { const g = Math.abs(q - c.i); return Math.min(g, N - g) < GAP; })) continue;
+    picked.push(c.i);
+  }
+  picked.sort((p, q) => p - q);
+  const LATS = [0, -5, 5, -6, 0, -4, 5];
+  picked.forEach((i, n) => { const lim = (tr.hw[i] || hw) - 3; H.pads.push(world(i, Math.max(-lim, Math.min(lim, LATS[n % LATS.length])))); });
   // (oil slicks removed: the track is clear. To bring them back, re-add oil(fraction, lateral, radius) calls here.)
   // rocks: a slalom, plus single blockers
   // (rocks removed)
@@ -97,7 +117,7 @@ export function makeCar(role) {
   return { role, name: '', x: 0, z: 0, h: 0, vx: 0, vz: 0, vf: 0, vl: 0, speed: 0, steer: 0, yaw: 0, lat: 0, idx: 0, total: 0, prog: 0,
     onRoad: true, drifting: false, braking: false, lapsDone: 0, lapStart: 0, lapTimes: [], finished: false, finishTime: 0,
     vmaxScale: 1, accScale: 1, stuck: 0, lastLapTime: 0, throttleLevel: 0,
-    nitro: 100, nitroOn: false, boosting: false, boostT: 0, oilT: 0, fallT: 0, ghostT: 0, padK: -1, laneNow: null, hitT: 0 };
+    nitro: 100, nitroOn: false, boosting: false, boostT: 0, oilT: 0, fallT: 0, ghostT: 0, padK: -1, laneNow: null, hitT: 0, wallHit: 0, wallT: 0 };
 }
 
 export function placeOnTrack(c, tr, idx, lat) {
@@ -105,7 +125,7 @@ export function placeOnTrack(c, tr, idx, lat) {
   c.x = tr.x[idx] + tr.nx[idx] * lat; c.z = tr.z[idx] + tr.nz[idx] * lat; c.h = tr.heading[idx];
   c.vx = c.vz = c.vf = c.vl = c.speed = c.steer = c.yaw = 0; c.idx = idx; c.total = idx > tr.N / 2 ? idx - tr.N : idx;
   c.lat = lat; c.prog = c.total; c.stuck = 0; c.onRoad = true; c.drifting = false;
-  c.nitroOn = c.boosting = false; c.boostT = c.oilT = c.fallT = c.ghostT = 0; c.padK = -1; c.laneNow = lat; c.yawS = 0;
+  c.nitroOn = c.boosting = false; c.boostT = c.oilT = c.fallT = c.ghostT = 0; c.padK = -1; c.laneNow = lat; c.yawS = 0; c.wallHit = 0; c.wallT = 0;
 }
 // put a car back on the road at the same spot along the lap (keeps its lap count)
 export function respawn(c, tr, lat) {
@@ -145,7 +165,8 @@ export function stepCar(c, inp, dt, tr, env) {
   }
   if (c.ghostT > 0) c.ghostT -= dt;
   if (c.hitT > 0) c.hitT -= dt;
-  c.onRoad = Math.abs(c.lat) <= tr.width / 2 + 1.2;
+  if (c.wallHit > 0) c.wallHit -= dt;
+  c.onRoad = Math.abs(c.lat) <= (tr.hw[c.idx] || tr.width / 2) + 1.2;
 
   // nitro tank + boost pads
   const wantN = !!inp.nitro && c.nitro > 0.5 && c.vf > 4;
@@ -155,19 +176,31 @@ export function stepCar(c, inp, dt, tr, env) {
   const bf = (wantN ? 1 : 0) + (c.boostT > 0 ? 1 : 0);   // 0, 1 or 2 boost sources
   c.boosting = bf > 0;
   const boost = bf > 1 ? 1.25 : bf;
-  const vmax = P.vmax * c.vmaxScale * (c.onRoad ? 1 : 0.5) * (1 + 0.2 * boost);
-  const target = inp.steer, rate = target === 0 ? 5 : 3.4;
+  const vmax = P.vmax * (tr.speedK || 1) * c.vmaxScale * (c.onRoad ? 1 : 0.5) * (1 + 0.2 * boost);
+  // ---- steering input: quicker to turn in, quicker to let go (full lock in ~0.15 s, back to centre in ~0.09 s)
+  const target = inp.steer, rate = target === 0 ? 14 : lerp(9, 5.5, clamp(Math.abs(c.vf) / P.vmax, 0, 1));
   c.steer += clamp(target - c.steer, -rate * dt, rate * dt);
 
   // heading from steering
   const sf = clamp(Math.abs(c.vf) / P.vmax, 0, 1);
-  const maxYaw = lerp(1.9, 0.8, Math.pow(sf, 0.8));
+  const maxYaw = lerp(3.4, 1.35, Math.pow(sf, 0.7));   // the nose turns NOW: 3.4 rad/s at walking pace, 1.35 at top speed
   const lowSpeed = clamp(Math.abs(c.vf) / 5, 0, 1);
   let yaw = c.steer * maxYaw * lowSpeed * (c.vf < -0.5 ? -1 : 1);
   if (inp.hand) yaw *= 1.35;
   if (c.oilT > 0) { c.oilT -= dt; yaw *= 0.75; }
-  c.yawS = (c.yawS || 0) + (yaw - (c.yawS || 0)) * Math.min(1, dt * 9);   // yaw inertia: no sudden snap when turning in/out
-  yaw = c.yawS; c.yaw = yaw; c.h -= yaw * dt;
+  // tyre ceiling: the car can only yaw as hard as the tyres can hold the line. Ask for more than that and the
+  // nose pushes wide (safe understeer) instead of the car spinning round — this is the "stable" part.
+  const yawCap = (inp.hand ? 100 : 70) * gripEnv / Math.max(6, c.speed);
+  const yawLim = Math.min(maxYaw, yawCap);
+  const wanted = Math.abs(yaw);
+  yaw = clamp(yaw, -yawLim, yawLim);
+  if (wanted > yawLim + 0.05 && c.vf > 12 && !inp.hand) c.vf -= Math.min(c.vf * 0.5, (wanted - yawLim) * c.vf * 0.9 * dt) , c.vx = Math.sin(c.h) * c.vf + c.vl * -Math.cos(c.h), c.vz = Math.cos(c.h) * c.vf + c.vl * Math.sin(c.h);   // tyres at the limit: the car sheds speed so the turn can complete
+  c.yawS = (c.yawS || 0) + (yaw - (c.yawS || 0)) * Math.min(1, dt * 26);   // a little yaw inertia, but quick: flicks left-right feel instant
+  yaw = c.yawS;
+  // self-aligning torque: the nose keeps following the direction of travel, so a slide pulls itself straight
+  // instead of turning into a spin. This is what makes the car feel planted at speed.
+  yaw += clamp((c.vl || 0) * 0.07, -0.9, 0.9) * lowSpeed * (c.oilT > 0 ? 0.25 : 1);
+  c.yaw = yaw; c.h -= yaw * dt;
   const fx = Math.sin(c.h), fz = Math.cos(c.h), rx = -fz, rz = fx;
 
   // re-decompose world velocity in the new heading frame
@@ -188,7 +221,9 @@ export function stepCar(c, inp, dt, tr, env) {
 
   // lateral grip
   const latAcc = Math.abs(yaw * vf);
-  let grip = inp.hand ? 1.3 : lerp(7, 3.2, clamp((latAcc - 26) / 18, 0, 1));
+  // the tyres now bite almost instantly (grip 30 -> 20 instead of 7 -> 3.2): the velocity follows the nose,
+  // so the car rotates hard without sliding wide. The handbrake is still the only way to break it loose.
+  let grip = inp.hand ? 1.6 : lerp(30, 20, clamp((latAcc - 40) / 40, 0, 1));
   if (!c.onRoad) grip = Math.min(grip, 4.5);
   grip *= gripEnv;
   if (c.oilT > 0) grip *= 0.16;
@@ -203,8 +238,33 @@ export function stepCar(c, inp, dt, tr, env) {
 
   updateTrackState(c, tr, false);
 
-  // soft world boundary
-  const lim = tr.width / 2 + 28;
+  // ---- stone walls along both edges: the car physically cannot leave the track ----
+  // WALL = pavement half width minus half the car, so the body just touches the wall.
+  const wall = (tr.hw[c.idx] || tr.width / 2) - 1.8;   // inner face of the stone wall minus half a car
+  if (Math.abs(c.lat) > wall) {
+    const s = Math.sign(c.lat), i = c.idx, ex = Math.abs(c.lat) - wall;
+    c.x -= tr.nx[i] * s * ex; c.z -= tr.nz[i] * s * ex;          // push the car back onto the road
+    const vn = (c.vx * tr.nx[i] + c.vz * tr.nz[i]) * s;           // speed straight into the wall
+    if (vn > 0) {
+      c.vx -= tr.nx[i] * s * vn * 1.15; c.vz -= tr.nz[i] * s * vn * 1.15;   // only the part going INTO the wall is removed (small rebound)
+      const hard = vn > 2.5;
+      if (hard) { c.wallHit = 0.32; c.hitT = Math.max(c.hitT, 0.32); c.wallT += dt; }
+      // a rub costs a little speed once per touch, then the car keeps sliding along the stone (it used to lose ~5% every frame = dead stop)
+      const loss = Math.min(0.12, vn / 150) + 0.5 * dt;
+      c.vx *= 1 - loss; c.vz *= 1 - loss;
+      // the nose is eased back parallel to the wall so the car does not keep pointing into it
+      if (c.vf > 3) {
+        const th = Math.atan2(tr.tx[i], tr.tz[i]); let dh = th - c.h; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+        if (Math.abs(dh) < 1.6) c.h += dh * Math.min(1, 5 * dt);
+      }
+      const gx = Math.sin(c.h), gz = Math.cos(c.h);
+      c.vf = c.vx * gx + c.vz * gz; c.vl = c.vx * -gz + c.vz * gx;
+    }
+    updateTrackState(c, tr, false);
+  }
+
+  // hard safety net far outside (should never be reached now that the walls are solid)
+  const lim = (tr.hw[c.idx] || tr.width / 2) + 40;
   if (Math.abs(c.lat) > lim) {
     const s = Math.sign(c.lat), i = c.idx, ex = Math.abs(c.lat) - lim;
     c.x -= tr.nx[i] * s * ex; c.z -= tr.nz[i] * s * ex;
@@ -258,7 +318,7 @@ const BP = { x: 0, z: 0, lat: 0 };
 export function applyHazards(c, H, tr, t, ev) {
   ev.pad = ev.oil = ev.burn = false; ev.hit = 0;
   if (c.fallT > 0 || c.ghostT > 0) return ev;
-  const N = tr.N, hw = tr.width / 2;
+  const N = tr.N, hw = tr.hw[c.idx] || tr.width / 2;
   for (let k = 0; k < H.pads.length; k++) {
     const p = H.pads[k], d = wrapIdx(c.prog - p.idx, N) * tr.ds;
     if (d > -7 && d < 7 && Math.abs(c.lat - p.lat) < 5.2) {
@@ -306,7 +366,7 @@ export function rankCars(cars) {
 const AI_IN = { throttle: 0, brake: 0, steer: 0, hand: false, nitro: false };
 // opts: { lane, latG, aware (0..1 how far ahead it reads hazards), nitroUse (0..1) }; ctx: { H, t, cars }
 export function aiControl(ai, tr, dt, opts, ctx) {
-  const N = tr.N, hw = tr.width / 2, i = ai.idx, speed = ai.speed;
+  const N = tr.N, i = ai.idx, hw = tr.hw[i] || tr.width / 2, speed = ai.speed;
   const H = ctx.H, clear = hw - 3.6;
   let lane = opts.lane;
   const look = (30 + speed * 1.35) * opts.aware, span = Math.max(4, Math.round(look / tr.ds));
@@ -343,12 +403,12 @@ export function aiControl(ai, tr, dt, opts, ctx) {
   const dx = tx - ai.x, dz = tz - ai.z, fx = Math.sin(ai.h), fz = Math.cos(ai.h);
   const cross = fx * dz - fz * dx, dot = fx * dx + fz * dz; // cross>0 => target on the right
   const err = Math.atan2(cross, dot);
-  AI_IN.steer = clamp(err * 2.4, -1, 1);
+  AI_IN.steer = clamp(err * (opts.gain || 1.8), -1, 1);   // 1.8: with the sharper steering a bigger gain makes the AI saw at the wheel
   // speed plan from upcoming curvature
   let kmax = 0; const sp2 = Math.round((20 + speed * 1.4) / tr.ds);
   for (let k = 0; k <= sp2; k += 2) kmax = Math.max(kmax, tr.kappa[(i + k) % N]);
   let vt = kmax > 1e-4 ? Math.sqrt(opts.latG / kmax) : 999;
-  vt = Math.min(vt, PARAMS.vmax * ai.vmaxScale, capV);
+  vt = Math.min(vt, PARAMS.vmax * (tr.speedK || 1) * ai.vmaxScale, capV);
   if (Math.abs(ai.lat - ai.laneNow) > tr.width * 0.45) vt = Math.min(vt, 22);
   AI_IN.throttle = speed < vt - 0.5 ? 1 : 0;
   AI_IN.brake = speed > vt + 3 ? 1 : 0;
