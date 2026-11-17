@@ -824,7 +824,8 @@ const canvas = $('gl');
 // weak phones (<= 4 GB RAM or <= 4 cores, e.g. Helio G36 class) start on lighter settings: fewer trees, lower starting resolution
 const LOW_END = isTouch && ((navigator.deviceMemory || 8) <= 4 || (navigator.hardwareConcurrency || 8) <= 4);
 // MSAA is wasted on dense screens (the pixel ratio already hides the jaggies) and costs a lot of fill rate
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isTouch && (window.devicePixelRatio || 1) < 1.5, powerPreference: 'high-performance' });
+// v35: MSAA on every device but weak ones (phones render at ~1.25x of a 2.6-3x screen, so without it edges are jagged)
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LOW_END, powerPreference: 'high-performance' });
 let dprMax = Math.min(window.devicePixelRatio || 1, isTouch ? 1.5 : 1.75), dpr = isTouch ? Math.min(dprMax, LOW_END ? 1 : 1.25) : dprMax, dprCeil = dprMax;
 renderer.setPixelRatio(dpr);
 const DPR_MIN = Math.min(LOW_END ? .9 : 1.1, dprMax);   // the adaptive resolution never drops below this, so cars stay sharp (was 0.75)
@@ -2111,7 +2112,7 @@ async function loadTrackWorld() {
       const im = g.images[g.textures[ti].source], bv = g.bufferViews[im.bufferView], o = bs + (bv.byteOffset || 0);
       const url = URL.createObjectURL(new Blob([buf.slice(o, o + bv.byteLength)], { type: im.mimeType }));
       const t = new THREE.TextureLoader().load(url, () => URL.revokeObjectURL(url));
-      t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+      t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
       texCache.set(ti, t); return t;
     };
     const group = new THREE.Group(); group.name = 'track_world';
@@ -2184,7 +2185,7 @@ const SC = { padTex: null, lavaTex: null, boulders: [], treeCells: [] };   // an
 function canvasTex(w, h, draw, repeat) {
   const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  if (repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; }
+  if (repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); }
   return t;
 }
 function addGantry(tr, idx, text, bg, fg, stripes) {
@@ -2953,7 +2954,7 @@ function buildStage() {
 
 // ======================= menu =======================
 function refreshMenu() {
-  setText($('menuBest'), (bestTime ? 'Best time  ' + fmt(bestTime) : 'No race record yet') + '  ·  v34');
+  setText($('menuBest'), (bestTime ? 'Best time  ' + fmt(bestTime) : 'No race record yet') + '  ·  v35');
   const m = MODEL_BY[settings.car], idx = MODEL_IDS.indexOf(settings.car);
   setText($('carName'), m.name); setText($('carTag'), m.tag); setText($('carCount'), (idx + 1) + ' / ' + MODEL_LIST.length);
   const rel = k => { const vs = MODEL_LIST.map(x => x[k]), lo = Math.min(...vs), hi = Math.max(...vs); if (hi - lo < 1e-6) return 92; return Math.round(40 + (m[k] - lo) / (hi - lo) * 60); };
