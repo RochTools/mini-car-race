@@ -1,6 +1,8 @@
 # Mini Car Race (PWA)
 
-A 3D five-car race (you + 4 rivals, one 5.6 km lap, hazards, nitro, 6 cameras), packaged as an installable, offline-capable Progressive Web App.
+A 3D four-car race (four different car models) on the Monaco track (one 2.6 km lap, hazards, nitro, 6 cameras), packaged as an installable, offline-capable Progressive Web App.
+
+Four cars are in the game — Bugatti Divo, Bugatti Chiron, Lamborghini Essenza and the Lotus Sports GT — pick yours with the ← → arrows in the menu; the other three become your rivals, so **every car on the track is a different model**. Steering is quick and grip-limited: the car turns hard but the tyres barely slip, and the top speed is a little lower than earlier builds.
 
 ## Put it online (needed to install it)
 Browsers only allow installing and offline mode on **HTTPS** (or localhost). Upload this whole folder to any static host:
@@ -19,7 +21,7 @@ Installed, it opens full screen in landscape with its own icon.
 Open the game once while online. The app shell, Three.js and the fonts are then cached by `sw.js`, and the game starts with no internet.
 
 ## Updating
-If you edit `src/*.js`, rebuild `index.html` first (run `python3 build.py .`; it inlines `src/` into the `<script type="module">` block: `/*SIM*/ /*GLYPHS*/ /*CIVIC*/ /*REVUELTO*/ /*SPORT*/` in `main.js` mark where `sim.js`, `glyphs.js`, `civic.js`, `revuelto.js`, `sportscar.js` go). Then change `VERSION` at the top of `sw.js` (for example `mini-car-race-v2`) so every player gets the new files.
+If you edit `src/*.js`, rebuild `index.html` first (run `python3 build.py .`; it inlines `src/` into the `<script type="module">` block: `/*SIM*/ /*GLYPHS*/ /*SPORT*/ /*GLBCAR*/ /*TRACK6*/ /*GLBTRACK*/` in `main.js` mark where `sim.js`, `glyphs.js`, `sportscar.js`, `glbcar.js`, `track6data.js`, `glbtrack.js` go). Then change `VERSION` at the top of `sw.js` (for example `mini-car-race-v2`) so every player gets the new files.
 
 ## Files
 - `index.html`  the whole game in one file
